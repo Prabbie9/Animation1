@@ -12,8 +12,8 @@ sys.path.insert(0, HERE)
 
 import importlib
 import scenelib
-from scenelib import config as C, layout
-for m in (C, layout):
+from scenelib import config as C, util, signals, layout
+for m in (C, util, signals, layout):
     importlib.reload(m)
 
 
@@ -60,6 +60,9 @@ def main():
     root = bpy.data.collections.new('Set')
     sc.collection.children.link(root)
     info = layout.build(root)
+    # Frame-1 phase: avenue (NB/SB) red, cross street (EB/WB) green.
+    for ap, st in (('NB', 'red'), ('SB', 'red'), ('EB', 'green'), ('WB', 'green')):
+        signals.set_state(ap, st)
     if a.stage == 'greybox':
         greybox_world(sc)
     bpy.ops.file.pack_all() if False else None

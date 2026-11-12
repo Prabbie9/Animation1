@@ -4,6 +4,7 @@ import random
 import bpy
 from mathutils import Vector, Euler
 from . import config as C
+from . import signals
 from .util import (collection, box, cylinder, flat_mat, rounded_corner_polygon,
                    extrude_polygon, mesh_object)
 
@@ -80,6 +81,19 @@ def build_markings(root):
             _bar('StopLine_W', col, a, -hs + C.PARKING, b, -0.2, white)
         else:
             _bar('StopLine_E', col, a, 0.2, b, hs - C.PARKING, white)
+        # Parking lanes (both sides): solid 100 mm white line between the travel lane and the
+        # parking lane, plus 'T' stall marks every 6.7 m (22 ft). No parking within 6 m (20 ft)
+        # of the crosswalk, so the parking line starts at the crosswalk + 6 m.
+        px0 = cw_x[1] + 6.0
+        for side in (1, -1):
+            yl = side * (hs - C.PARKING)
+            a, b = sorted((sx * px0, sx * C.CROSS_LEN))
+            _bar('ParkLine', col, a, yl - 0.05, b, yl + 0.05, white)
+            xs = px0
+            while xs <= C.CROSS_LEN:
+                y_in, y_out = sorted((yl, yl + side * 0.6))
+                _bar('ParkT', col, sx * xs - 0.05, y_in, sx * xs + 0.05, y_out, white)
+                xs += 6.7
         y = -hs + 0.4
         a, b = sorted((sx * cw_x[0], sx * cw_x[1]))
         while y + 0.6 <= hs - 0.3:
@@ -156,6 +170,8 @@ def build_poles(root):
         ((-1, 1), (0, -1), [(None, 1.65)], 'WB'),                  # westbound, NW corner
     ]
     heads = []
+    housing = flat_mat('GB_sig_housing', (0.03, 0.03, 0.03), 0.5)
+    backplate = flat_mat('GB_sig_backplate', (0.02, 0.02, 0.02), 0.6)
     for (sx, sy), (dx, dy), lane_pts, name in masts:
         # Pole on the corner diagonal, 0.8 m behind the curved kerb face (on the sidewalk).
         ccx, ccy = C.AVE_HALF + C.KERB_RADIUS, C.CROSS_HALF + C.KERB_RADIUS
@@ -169,8 +185,10 @@ def build_poles(root):
         for lx, ly in lane_pts:
             hx = lx if lx is not None else px
             hy = ly if ly is not None else py
-            # 3-section 300 mm head: ~1.05 m tall; bottom at 5.1 m above the road
-            hd = box(f'SigHead_{name}', col, (0.36, 0.30, 1.05), (hx, hy, 5.1), steel)
+            # 3-section 300 mm head, bottom 5.2 m above the road, hung from the arm at 6.75 m
+            signals.build_head(f'SigHead_{name}_{len(heads)}', col, name, (hx, hy, 5.2),
+                               housing, backplate)
+            box('SigHanger', col, (0.05, 0.05, 0.5), (hx, hy, 6.27), steel)
             heads.append((name, hx, hy))
     return col, lamps, heads
 

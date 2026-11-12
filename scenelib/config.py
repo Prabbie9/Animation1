@@ -47,11 +47,11 @@ CAM_FOCAL = 35.0           # mm
 CAM_SENSOR = 36.0          # mm (full-frame width)
 CAM_FSTOP = 2.0
 CAM_HEIGHT = 1.70          # m eye height above the sidewalk surface
-CAM_X = AVE_HALF + 0.70    # m, 0.70 m inside the kerb on the east sidewalk
-CAM_Y0 = -25.0             # start
-CAM_Y1 = -22.0             # end (3 m dolly forward, northwards)
-CAM_YAW_DEG = 9.0          # turned slightly left (towards the avenue centre)
-CAM_PITCH_DEG = 2.0        # slightly up so the sky glow and tops read
+CAM_X = AVE_HALF + 0.50    # m, 0.5 m inside the kerb on the east sidewalk
+CAM_Y0 = -29.0             # start
+CAM_Y1 = -26.0             # end (3 m dolly forward, northwards)
+CAM_YAW_DEG = 14.0         # turned left towards the avenue centre
+CAM_PITCH_DEG = 3.0
 
 # --- Reference figures -----------------------------------------------------------
 HUMAN_H = 1.75
