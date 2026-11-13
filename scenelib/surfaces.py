@@ -160,8 +160,8 @@ def asphalt():
 
     # --- standing water ----------------------------------------------------------------------
     # kerb water: band 0.08-0.4 m, broken into patches (leaves/grit/uneven gutter)
-    gband = g.maprange(dk, 0.06, 0.4, 1.0, 0.0, smooth=True)
-    gbreak = g.maprange(g.noise(g.vscale(obj, (1.0, 1.0, 1.0)), 0.9, 3.0), 0.5, 0.62)
+    gband = g.maprange(dk, 0.05, 0.3, 1.0, 0.0, smooth=True)
+    gbreak = g.maprange(g.noise(g.vscale(obj, (1.0, 1.0, 1.0)), 0.9, 3.0), 0.52, 0.64)
     gwater = g.math('MULTIPLY', gband, gbreak)
     # rut puddles in the wheel paths + random depressions; size varies with a second noise
     dep = g.noise(obj, 0.14, 5.0, 0.6)
@@ -175,6 +175,10 @@ def asphalt():
     depth = g.maprange(water, 0.0, 1.0, 0.0, 1.0)
     film_r = wet_grp.outputs['Roughness']
     pud_r = g.mixf(depth, 0.08, 0.02)
+    # gutter runoff is flowing and rain-stirred: rougher than still puddles (~0.1). Without this
+    # the gutter strip acts as a continuous mirror and stretches the signal/tail-lamp reflections
+    # into a glowing column along the kerb.
+    pud_r = g.math('MAXIMUM', pud_r, g.math('MULTIPLY', gwater, 0.11))
     # tiny roughness noise even in puddles (dust film, rain ripples are added in the rain pass)
     pud_r = g.math('ADD', pud_r, g.math('MULTIPLY', g.noise(obj, 30.0, 2.0), 0.02))
     rough = g.mixf(water, film_r, pud_r)

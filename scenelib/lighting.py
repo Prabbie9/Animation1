@@ -322,7 +322,12 @@ def vehicle_light_materials():
         mixc = n.new('ShaderNodeMix'); mixc.data_type = 'RGBA'
         l.new(front.outputs[0], mixc.inputs['Factor'])
         mixc.inputs['A'].default_value = (1.0, 0.0, 0.0, 1)   # sRGB gamut edge; real lamps are even more saturated
-        mixc.inputs['B'].default_value = (*M.blackbody_rgb(5000), 1)
+        # headlamp colour per vehicle: 'head_tint' 0 = halogen (3300 K) .. 1 = LED (5800 K)
+        hcol = n.new('ShaderNodeMix'); hcol.data_type = 'RGBA'
+        l.new(attr('head_tint'), hcol.inputs['Factor'])
+        hcol.inputs['A'].default_value = (*M.blackbody_rgb(3300), 1)
+        hcol.inputs['B'].default_value = (*M.blackbody_rgb(5800), 1)
+        l.new(hcol.outputs['Result'], mixc.inputs['B'])
         l.new(mixc.outputs['Result'], b.inputs['Emission Color'])
         # camera rays only: what the road/glass reflect is the matching small light added in
         # lamp_lights() (directly sampled -> clean reflections instead of speckle)
@@ -354,7 +359,7 @@ def headlight_beam(col, name, parent, local, kelvin=5000, lumens=1000):
     ld.color = M.blackbody_rgb(kelvin)
     ld.spot_size = math.radians(cone)
     ld.spot_blend = 0.3
-    ld.shadow_soft_size = 0.05
+    ld.shadow_soft_size = 0.07      # lamp aperture: gives the wet-road reflection streak its width
     ld.use_nodes = True
     n, l = ld.node_tree.nodes, ld.node_tree.links
     em = n['Emission']
@@ -432,17 +437,22 @@ def _lamp_centroids(body, rear=True):
 
 def lamp_lights(col, name, v, brake=True):
     """Small rear-facing red spot lights at the lamp centroids: brake ~100 cd + tail ~8 cd
-    (SAE J586/J585), 160 deg cone. Invisible to the camera (the lens mesh is seen instead)."""
+    (SAE J586/J585), 100 deg cone with soft falloff. Invisible to the camera (the lens mesh is
+    seen instead)."""
     found = _lamp_centroids(v['body'])
     out = []
     for side, (c, area) in found.items():
-        cd = (100.0 if brake else 0.0) + 8.0
-        cone = 160.0
+        # SAE J586 photometry: full intensity on-axis, ~50 % at 20 deg, ~10-20 % beyond 45 deg.
+        # A 100 deg cone with a full blend reproduces that falloff (a uniform 160 deg cone lit the
+        # kerb beside the taxi as brightly as the road behind it: the "glowing kerb").
+        cone = 100.0
         omega = 2 * math.pi * (1 - math.cos(math.radians(cone / 2)))
         ld = bpy.data.lights.new(f'{name}_lamp_{side}', 'SPOT')
-        ld.energy = spot_watts(cd * omega, cone)
+        ld['tail_W'] = spot_watts(8.0 * omega, cone)         # tail ~8 cd
+        ld['brake_W'] = spot_watts(100.0 * omega, cone)      # brake adds ~100 cd
+        ld.energy = ld['tail_W'] + (ld['brake_W'] if brake else 0.0)
         ld.color = (1.0, 0.02, 0.0)
-        ld.spot_size = math.radians(cone); ld.spot_blend = 0.5
+        ld.spot_size = math.radians(cone); ld.spot_blend = 1.0
         ld.shadow_soft_size = min(0.06, max(0.02, math.sqrt(area) / 2))
         o = bpy.data.objects.new(f'{name}_lamp_{side}', ld)
         col.objects.link(o)
@@ -462,19 +472,26 @@ def vehicles(root, vehicles, sizes):
     fix_unlit_materials()
     vehicle_light_materials()
     taxi_roof_sign()
+    import random
+    rng = random.Random(C.SEED + 31)
     for name, v in vehicles.items():
         key = v['key']
         body, root_o = v['body'], v['root']
+        # real fleets differ: lamp output/aim/ageing and halogen vs LED (note 6 of the review)
+        head = rng.uniform(0.55, 1.3)
+        tint = rng.choice((0.0, 0.15, 0.55, 1.0))
         for o in (body, root_o):
-            o['head'] = 1.0
+            o['head'] = head
+            o['head_tint'] = tint
             o['tail'] = 1.0
             o['brake'] = 1.0
         L = sizes[key][1]
         hx, hy, hz = VEHICLE_LAMPS[key]
         if not name.startswith('sb'):
             v['lamps'] = lamp_lights(col, name, v)
-        v['beams'] = [headlight_beam(col, f'{name}_beam_{s}', root_o, (s * hx, L / 2 - hy, hz))
-                      for s in (-1, 1)]
+        kel = 3300 + 2500 * tint
+        v['beams'] = [headlight_beam(col, f'{name}_beam_{s}', root_o, (s * hx, L / 2 - hy, hz),
+                                     kelvin=kel, lumens=1000 * head) for s in (-1, 1)]
 
 
 # ---------------------------------------------------------------------------------- camera / look

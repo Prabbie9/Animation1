@@ -13,8 +13,8 @@ sys.path.insert(0, HERE)
 import importlib
 import scenelib
 from scenelib import (config as C, util, materials, signals, layout, assets, dressing, buildings,
-                      lighting, surfaces, vehicle_paint, rain)
-for m in (C, util, materials, signals, layout, assets, dressing, buildings, lighting, surfaces, vehicle_paint, rain):
+                      lighting, surfaces, vehicle_paint, rain, traffic)
+for m in (C, util, materials, signals, layout, assets, dressing, buildings, lighting, surfaces, vehicle_paint, rain, traffic):
     importlib.reload(m)
 
 
@@ -86,6 +86,9 @@ def main():
     if a.stage != 'greybox':
         buildings.build(root)
     vehicles = dressing.build(root)
+    specs = traffic.avenue_specs(vehicles)
+    if a.stage not in ('greybox', 'assets', 'facades'):
+        specs.update(traffic.add_cross_traffic(root, vehicles))
     if a.stage != 'greybox' and not a.refs:
         bpy.data.collections['Reference'].hide_render = True
         for o in bpy.data.collections['Reference'].objects:
@@ -97,6 +100,7 @@ def main():
         greybox_world(sc)
     else:
         night(sc, root, vehicles)
+        traffic.animate(vehicles, specs)
     bpy.ops.file.pack_all() if False else None
     bpy.ops.wm.save_as_mainfile(filepath=a.out, relative_remap=True, compress=True)
     print('SAVED', a.out)

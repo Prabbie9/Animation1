@@ -229,6 +229,29 @@ def build_reference(root):
     return col, (cx, cy)
 
 
+def handheld(cam):
+    """Hand-held sway on top of the dolly: smooth Perlin noise (F-curve Noise modifiers, one
+    octave, so no jitter) on pitch/yaw/roll and a small positional drift. Amplitudes: yaw
+    yaw ~+-0.4 deg, pitch ~+-0.3 deg, roll ~+-0.2 deg (measured by tools/motion_check.py; all < 1 deg), position ~+-1 cm; periods of
+    ~1.5-3 s like a person walking slowly with a stabilised camera."""
+    cam.keyframe_insert('rotation_euler', frame=C.FRAME_START)
+    fcs = {(fc.data_path, fc.array_index): fc for fc in cam.animation_data.action.fcurves}
+    #             path, index, strength (peak-to-peak), period in frames, phase
+    spec = [('rotation_euler', 0, math.radians(1.1), 52, 11.0),
+            ('rotation_euler', 2, math.radians(1.4), 70, 37.0),
+            ('rotation_euler', 1, math.radians(0.8), 61, 73.0),
+            ('location', 0, 0.022, 64, 5.0),
+            ('location', 2, 0.016, 38, 91.0)]
+    for path, idx, strength, period, phase in spec:
+        fc = fcs[(path, idx)]
+        m = fc.modifiers.new('NOISE')
+        m.scale = period
+        m.strength = strength
+        m.phase = phase
+        m.depth = 0
+        m.blend_type = 'ADD'
+
+
 def build_camera(root, focus_point):
     col = collection('Camera', root)
     cam_data = bpy.data.cameras.new('ShotCam')
@@ -259,6 +282,7 @@ def build_camera(root, focus_point):
     for fc in cam.animation_data.action.fcurves:
         for kp in fc.keyframe_points:
             kp.interpolation = 'LINEAR'
+    handheld(cam)
     bpy.context.scene.camera = cam
     return cam
 

@@ -121,6 +121,8 @@ blender -b scene.blend -P render.py -- [options]
 | `scenelib/lighting.py` | sky glow, street lamps, vehicle lamps, exposure (photometric units) |
 | `scenelib/surfaces.py`, `materials.py` | asphalt with puddles and gutter water, shared wetness model |
 | `scenelib/signals.py` | signal heads and the signal cycle |
+| `scenelib/traffic.py` | vehicle motion (analytic, one clock), wheel spin, brake lamps, suspension pitch |
+| `scenelib/rain.py` | rain streaks (Geometry Nodes), ripples, runoff, drips, wet vehicles, wipers |
 | `render.py`, `encode.sh` | production render and encode |
 | `assets/lib/` | prepared assets (metric, oriented, textures ≤2K) used by the builder |
 | `assets/polyhaven/` | Poly Haven textures and HDRI (CC0) |
@@ -137,5 +139,42 @@ python3 tools/fetch_assets.py
 blender -b --factory-startup -P tools/prep_assets.py
 ```
 
-## 6. Credits
+## 6. Traffic timeline (what moves, when, and why)
+
+One clock drives everything: `t = (frame - 1) / 24` s (frame 1 = 0.0 s, frame 192 = 7.96 s).
+Country: USA, right-hand traffic. Positions are in metres from the intersection centre
+(+Y = north, +X = east). All motion is computed analytically in `scenelib/traffic.py` and
+baked one key per frame. `tools/motion_check.py` re-measures it from the evaluated scene
+(speeds, decelerations, stopping distances, wheel slip, ground contact, overlaps, stop-line
+crossings versus signal state).
+
+**Signals** (`scenelib/config.py`):
+
+| t (s) | frame | Avenue (NB/SB, our direction) | Cross street (EB/WB) |
+|---|---|---|---|
+| 0.0 | 1 | red | green |
+| 3.0 | 73 | red | **amber** (3.0 s) |
+| 6.0 | 145 | red | red (all-red clearance 1.5 s) |
+| 7.5 | 181 | **green** | red |
+
+**Vehicles**
+
+| Vehicle | Lane | Behaviour | Key times |
+|---|---|---|---|
+| Taxi (Crown Victoria) | NB kerb lane, first at the stop line | stopped all shot, brake lamps on | at green (7.5 s), a ~1 s reaction means it cannot move before the shot ends |
+| Camry (dark grey) | NB inner lane, passes the camera on its left | 8.0 m/s (29 km/h); brakes from **t = 1.0 s (f25)**: brake lamps on, nose dips (pitch spring 1.4 Hz, ζ 0.45); smoothstep speed profile, peak 3.84 m/s² (0.39 g) | stops at **t ≈ 4.1 s (f98)** after 12.5 m, front 0.7 m behind the taxi's front; small nose rebound after stopping |
+| SB queue: SUV, gold sedan, minivan | SB lanes, far stop line | stopped, headlights on (varied output and colour temperature), wipers 45/min | stay stopped through f192 (same reaction-time argument) |
+| WB pickup (wb1) | WB lane (north half of the cross street) | through on green at 11 m/s (25 mph) | crosses its stop line at f2 (green), passes the centre at 1.3 s |
+| EB wagon (eb2) | EB lane (south half) | through on green, 11 m/s | crosses its stop line at f26 (green), passes the centre at 2.3 s |
+| WB hatchback (wb3) | WB lane | 4.1 m from its stop line at amber onset; stopping comfortably (3.4 m/s²) would need 17.8 m, so it **legally proceeds on amber** | enters at f83 (3.4 s, amber), clears the far crosswalk before the all-red at 6.0 s |
+| EB minivan (eb4) | EB lane | 32.6 m back at amber onset: 0.9 s reaction, then brakes (peak 4.0 m/s², 22.5 m) | brake lamps from f96 (3.9 s); stops **0.8 m behind its stop line** at ~f191; never enters |
+| Parked cars | cross-street parking lanes | parked, lights off | – |
+| Pedestrians (2) | NW corner, facing south | waiting at the kerb to cross the cross street (DON'T WALK: the parallel avenue phase is red) | static |
+
+**Camera:** 3 m dolly north along the east kerb (y −29 → −26 m, constant 0.375 m/s) at 1.85 m
+(1.7 m eye height above the 15 cm kerb). Hand-held sway from smooth Perlin noise: yaw ±0.39°,
+pitch ±0.25°, roll ±0.23° (all < 1°), ~1–2 cm positional drift. Measured largest frame-to-frame
+step: 0.018°.
+
+## 7. Credits
 See [CREDITS.md](CREDITS.md). The CC BY assets require attribution when the film is published.

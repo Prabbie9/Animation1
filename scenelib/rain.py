@@ -21,7 +21,7 @@ from .util import collection
 
 FALL_SPEED = 6.0          # m/s
 STREAK_LEN = FALL_SPEED / (2 * C.FPS)      # 180-degree shutter
-DROP_W = 0.0016           # m
+DROP_W = 0.002            # m (light-rain drops are mostly 1-2.5 mm)
 
 
 # ------------------------------------------------------------------------- clock
@@ -40,7 +40,7 @@ def streak_material():
     m, n, l = M.new('RainStreak')
     out = n['Material Output']
     n.remove(n['Principled BSDF'])
-    tr = n.new('ShaderNodeBsdfTranslucent'); tr.inputs['Color'].default_value = (0.6, 0.62, 0.64, 1)
+    tr = n.new('ShaderNodeBsdfTranslucent'); tr.inputs['Color'].default_value = (0.8, 0.82, 0.84, 1)
     gl = n.new('ShaderNodeBsdfGlossy'); gl.inputs['Roughness'].default_value = 0.08
     ad = n.new('ShaderNodeAddShader'); l.new(tr.outputs[0], ad.inputs[0]); l.new(gl.outputs[0], ad.inputs[1])
     tp = n.new('ShaderNodeBsdfTransparent')
@@ -50,7 +50,7 @@ def streak_material():
     pi = n.new('ShaderNodeMath'); pi.operation = 'MULTIPLY'; pi.inputs[1].default_value = math.pi
     l.new(sep.outputs['Y'], pi.inputs[0])
     sn = n.new('ShaderNodeMath'); sn.operation = 'SINE'; l.new(pi.outputs[0], sn.inputs[0])
-    a = n.new('ShaderNodeMath'); a.operation = 'MULTIPLY'; a.inputs[1].default_value = 0.4
+    a = n.new('ShaderNodeMath'); a.operation = 'MULTIPLY'; a.inputs[1].default_value = 0.6
     l.new(sn.outputs[0], a.inputs[0])
     mx = n.new('ShaderNodeMixShader')
     l.new(a.outputs[0], mx.inputs['Fac']); l.new(tp.outputs[0], mx.inputs[1]); l.new(ad.outputs[0], mx.inputs[2])
@@ -240,10 +240,30 @@ def _ring_layer(n, l, xy, t, scale, period, speed, seed):
     r = fm('MULTIPLY', tau, period * speed)                                 # ring radius (m)
     d = fm('DIVIDE', vor.outputs['Distance'], scale)                        # distance to impact (m)
     dd = fm('SUBTRACT', d, r)
-    wave = fm('SINE', fm('MULTIPLY', dd, 2 * math.pi / 0.014))
-    env = fm('EXPONENT', fm('MULTIPLY', fm('MULTIPLY', dd, dd), -1.0 / (0.012 ** 2)))
+    wave = fm('SINE', fm('MULTIPLY', dd, 2 * math.pi / 0.022))      # 2.2 cm capillary-gravity wave
+    env = fm('EXPONENT', fm('MULTIPLY', fm('MULTIPLY', dd, dd), -1.0 / (0.02 ** 2)))
     fade = fm('POWER', fm('SUBTRACT', 1.0, tau), 2.0)
     return fm('MULTIPLY', fm('MULTIPLY', wave, env), fade)
+
+
+def patch_ripples(m):
+    """Faint rain-impact rings on the repair patches (film only, no standing water)."""
+    nt = m.node_tree
+    n, l = nt.nodes, nt.links
+    b = n['Principled BSDF']
+    base = b.inputs['Normal'].links[0].from_socket if b.inputs['Normal'].links else None
+    t = time_value(nt)
+    tc = n.new('ShaderNodeTexCoord')
+    sep = n.new('ShaderNodeSeparateXYZ'); l.new(tc.outputs['Object'], sep.inputs['Vector'])
+    xy = n.new('ShaderNodeCombineXYZ'); l.new(sep.outputs['X'], xy.inputs['X']); l.new(sep.outputs['Y'], xy.inputs['Y'])
+    r = _ring_layer(n, l, xy.outputs['Vector'], t, 7.0, 0.55, 0.22, 1)
+    h = n.new('ShaderNodeMath'); h.operation = 'MULTIPLY'; h.inputs[1].default_value = 0.0002
+    l.new(r, h.inputs[0])
+    bump = n.new('ShaderNodeBump'); bump.inputs['Distance'].default_value = 1.0
+    l.new(h.outputs[0], bump.inputs['Height'])
+    if base is not None:
+        l.new(base, bump.inputs['Normal'])
+    l.new(bump.outputs['Normal'], b.inputs['Normal'])
 
 
 def water_surface_animation(road_mat):
@@ -274,7 +294,7 @@ def water_surface_animation(road_mat):
     rings = fm('ADD', r1, r2)
     # strong in standing water, faint on the film (impacts only dent a thin film)
     wgt = fm('ADD', fm('MULTIPLY', water, 0.85), 0.15)
-    h = fm('MULTIPLY', fm('MULTIPLY', rings, wgt), 0.0004)       # metres
+    h = fm('MULTIPLY', fm('MULTIPLY', rings, wgt), 0.0007)       # metres
     # gutter runoff: ripple pattern advected along the kerbs towards the corner drains
     ax = fm('ABSOLUTE', sep.outputs['X']); ay = fm('ABSOLUTE', sep.outputs['Y'])
     along_ave = fm('ADD', ay, fm('MULTIPLY', t, 0.45))           # flows towards smaller |y|
@@ -466,6 +486,8 @@ def build(root, cam, vehicles, road_mat, awning_edges):
     rain_streaks(col, cam, proto, (-12.0, -6.0, 0.0), (14.0, 40.0, 16.0), 18000, 23, 'RainFar')
     awning_drips(col, cam, streak_proto(col, sm, name='DripProto'), awning_edges, random.Random(C.SEED + 9))
     water_surface_animation(road_mat)
+    if bpy.data.materials.get('Asphalt_patch'):
+        patch_ripples(bpy.data.materials['Asphalt_patch'])
     catch_basins(root)
     wet_vehicles()
     wipers(root, vehicles)
