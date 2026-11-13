@@ -243,7 +243,13 @@ def _ring_layer(n, l, xy, t, scale, period, speed, seed):
     wave = fm('SINE', fm('MULTIPLY', dd, 2 * math.pi / 0.022))      # 2.2 cm capillary-gravity wave
     env = fm('EXPONENT', fm('MULTIPLY', fm('MULTIPLY', dd, dd), -1.0 / (0.02 ** 2)))
     fade = fm('POWER', fm('SUBTRACT', 1.0, tau), 2.0)
-    return fm('MULTIPLY', fm('MULTIPLY', wave, env), fade)
+    # only ~half the cells get a drop in any given period (re-drawn each period), so rings are
+    # sparse with calm water between them, as in light rain
+    cyc = fm('FLOOR', fm('ADD', fm('DIVIDE', t, period), phase))
+    act = n.new('ShaderNodeTexWhiteNoise'); act.noise_dimensions = '4D'
+    l.new(vor.outputs['Position'], act.inputs['Vector']); l.new(cyc, act.inputs['W'])
+    on = fm('GREATER_THAN', act.outputs['Value'], 0.5)
+    return fm('MULTIPLY', fm('MULTIPLY', fm('MULTIPLY', wave, env), fade), on)
 
 
 def patch_ripples(m):
@@ -289,12 +295,11 @@ def water_surface_animation(road_mat):
             else:
                 l.new(v, x.inputs[i])
         return x.outputs[0]
-    r1 = _ring_layer(n, l, xy.outputs['Vector'], t, 7.0, 0.55, 0.22, 1)
-    r2 = _ring_layer(n, l, xy.outputs['Vector'], t, 9.5, 0.45, 0.25, 2)
-    rings = fm('ADD', r1, r2)
+    # ~25 cells/m2, half active per 0.55 s period -> ~12 visible rings/m2 at any instant
+    rings = _ring_layer(n, l, xy.outputs['Vector'], t, 5.0, 0.55, 0.22, 1)
     # strong in standing water, faint on the film (impacts only dent a thin film)
-    wgt = fm('ADD', fm('MULTIPLY', water, 0.85), 0.15)
-    h = fm('MULTIPLY', fm('MULTIPLY', rings, wgt), 0.0007)       # metres
+    wgt = fm('ADD', fm('MULTIPLY', water, 0.92), 0.08)
+    h = fm('MULTIPLY', fm('MULTIPLY', rings, wgt), 0.0005)       # metres
     # gutter runoff: ripple pattern advected along the kerbs towards the corner drains
     ax = fm('ABSOLUTE', sep.outputs['X']); ay = fm('ABSOLUTE', sep.outputs['Y'])
     along_ave = fm('ADD', ay, fm('MULTIPLY', t, 0.45))           # flows towards smaller |y|

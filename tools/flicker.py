@@ -16,7 +16,7 @@ REGIONS = {   # fractions (x0, y0, x1, y1), top-left origin
     'sky': (0.60, 0.02, 0.75, 0.12),
 }
 for d in sys.argv[1:]:
-    files = sorted(glob.glob(os.path.join(d, 'f*.png')))
+    files = sorted(glob.glob(os.path.join(d, 'f[0-9]*.png')))
     fr = np.stack([np.asarray(Image.open(f).convert('RGB'), dtype=np.float32) / 255 for f in files])
     lum = fr @ np.array([0.2126, 0.7152, 0.0722], np.float32)
     d2 = np.abs(lum[:-2] - 2 * lum[1:-1] + lum[2:])          # (T-2, H, W)

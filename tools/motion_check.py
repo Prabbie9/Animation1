@@ -149,9 +149,13 @@ for n, pts in track.items():
               f'-> {"proceeding is correct" if dist < need else "SHOULD HAVE STOPPED"}')
         if dist >= need:
             problems.append(f'{n} should have stopped for the amber')
-    # clears before all-red?
-    far = sl + 3.0
-    clear = next((F[i] for i, p in enumerate(pts) if p.x * d - half > far - 3.0 - C.CROSSWALK_W), None)
+    # clears the far crosswalk (exit side) before the all-red ends? (rear past the crosswalk)
+    exit_edge = C.crosswalk_span(C.AVE_HALF)[1]
+    clear = next((F[i] for i, p in enumerate(pts) if p.x * d - half > exit_edge), None)
+    red_f = C.t2f(C.SIG_CROSS_RED_T)
+    print(f'      rear clears the far crosswalk at f{clear} (red starts f{red_f}, avenue green f{C.t2f(C.SIG_AVE_GREEN_T)})')
+    if clear is None or clear > C.t2f(C.SIG_AVE_GREEN_T):
+        problems.append(f'{n} still in the intersection when the avenue turns green')
 
 # camera sway
 base = cam_rot[0]
