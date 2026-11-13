@@ -40,7 +40,7 @@ def new(name):
 
 
 def pbr(name, tid, size_m, tint=(1, 1, 1), tint_var=0.0, rough_mul=1.0, normal_strength=1.0,
-        box_blend=0.2, coord='Object', bump_disp=0.0):
+        box_blend=0.2, coord='Object', bump_disp=0.0, porosity=1.0, coat_rough=0.07):
     """Image-based PBR material. size_m: real-world width (m) covered by one texture tile.
     tint_var: per-object random brightness/hue variation (uses Object Info > Random)."""
     m, n, l = new(name)
@@ -91,7 +91,8 @@ def pbr(name, tid, size_m, tint=(1, 1, 1), tint_var=0.0, rough_mul=1.0, normal_s
         bp.inputs['Strength'].default_value = 1.0
         l.new(dt.outputs['Color'], bp.inputs['Height']); l.new(normal, bp.inputs['Normal'])
         normal = bp.outputs['Normal']
-    wet_layer(m, col, rough, normal)
+    wet_layer(m, col, rough, normal, porosity)
+    m.node_tree.nodes['Principled BSDF'].inputs['Coat Roughness'].default_value = coat_rough
     return m
 
 
@@ -109,7 +110,7 @@ def wet_layer(m, col, rough, normal, porosity=1.0):
     l.new(g.outputs['Roughness'], b.inputs['Roughness'])
     l.new(g.outputs['Coat'], b.inputs['Coat Weight'])
     b.inputs['Coat IOR'].default_value = 1.33
-    b.inputs['Coat Roughness'].default_value = 0.04
+    b.inputs['Coat Roughness'].default_value = 0.07
     l.new(normal, b.inputs['Normal'])
 
 
@@ -149,15 +150,30 @@ def wetness_group():
         l.new(dk.outputs[0], cmb.inputs[i])
     l.new(cmb.outputs['Color'], mul.inputs['B'])
     l.new(mul.outputs['Result'], go.inputs['Color'])
-    # roughness: lerp(rough, rough*0.25, wet)
-    r2 = n.new('ShaderNodeMath'); r2.operation = 'MULTIPLY'; r2.inputs[1].default_value = 0.25
-    l.new(gi.outputs['Roughness'], r2.inputs[0])
+    # orientation: rain soaks horizontal surfaces into a film; vertical ones just darken/gloss a bit
+    geo = n.new('ShaderNodeNewGeometry')
+    sz = n.new('ShaderNodeSeparateXYZ'); l.new(geo.outputs['Normal'], sz.inputs['Vector'])
+    hz = n.new('ShaderNodeMapRange')
+    hz.inputs['From Min'].default_value = 0.7; hz.inputs['From Max'].default_value = 0.95
+    l.new(sz.outputs['Z'], hz.inputs['Value'])
+    # roughness factor: vertical 0.6x, horizontal 0.3x (water fills the micro-texture)
+    fac = n.new('ShaderNodeMapRange')
+    fac.inputs['To Min'].default_value = 0.6; fac.inputs['To Max'].default_value = 0.3
+    l.new(hz.outputs['Result'], fac.inputs['Value'])
+    r2 = n.new('ShaderNodeMath'); r2.operation = 'MULTIPLY'
+    l.new(gi.outputs['Roughness'], r2.inputs[0]); l.new(fac.outputs['Result'], r2.inputs[1])
     lr = n.new('ShaderNodeMix'); lr.data_type = 'FLOAT'
     l.new(wet.outputs[0], lr.inputs['Factor'])
     l.new(gi.outputs['Roughness'], lr.inputs['A']); l.new(r2.outputs[0], lr.inputs['B'])
     l.new(lr.outputs['Result'], go.inputs['Roughness'])
-    c = n.new('ShaderNodeMath'); c.operation = 'MULTIPLY'; c.inputs[1].default_value = 0.6
-    l.new(wet.outputs[0], c.inputs[0]); l.new(c.outputs[0], go.inputs['Coat'])
+    # water film (coat): only on near-horizontal surfaces, partial (the aggregate pokes through)
+    c = n.new('ShaderNodeMath'); c.operation = 'MULTIPLY'; c.inputs[1].default_value = 0.35
+    l.new(wet.outputs[0], c.inputs[0])
+    c2 = n.new('ShaderNodeMath'); c2.operation = 'MULTIPLY'
+    l.new(c.outputs[0], c2.inputs[0]); l.new(hz.outputs['Result'], c2.inputs[1])
+    c3 = n.new('ShaderNodeMath'); c3.operation = 'MULTIPLY'
+    l.new(c2.outputs[0], c3.inputs[0]); l.new(gi.outputs['Porosity'], c3.inputs[1])
+    l.new(c3.outputs[0], go.inputs['Coat'])
     return g
 
 

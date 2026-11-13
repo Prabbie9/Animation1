@@ -81,10 +81,50 @@ def build_head(name, col, approach, loc, housing_mat, backplate_mat):
     return parent
 
 
+SIGNAL_NITS = 9000.0       # LED signal lens luminance (cd/m2)
+
+
+def _strength(colour, lit):
+    return SIGNAL_NITS / 683.0 if colour == lit else 0.0
+
+
 def set_state(approach, lit):
     """lit: 'red' | 'amber' | 'green' | None. Used for static test renders."""
     for colour in COLOURS:
         m = bpy.data.materials.get(f'SigLens_{approach}_{colour}')
         if m:
             m.node_tree.nodes['Principled BSDF'].inputs['Emission Strength'].default_value = \
-                40.0 if colour == lit else 0.0
+                _strength(colour, lit)
+
+
+def animate_cycle():
+    """Keyframe every signal lens on the shared clock (constant interpolation: LED heads switch
+    instantly). See config.SIG_* for the phase plan."""
+    from . import config as C
+    plan = {
+        'EB': [(C.FRAME_START, 'green'), (C.t2f(C.SIG_CROSS_AMBER_T), 'amber'), (C.t2f(C.SIG_CROSS_RED_T), 'red')],
+        'NB': [(C.FRAME_START, 'red'), (C.t2f(C.SIG_AVE_GREEN_T), 'green')],
+    }
+    plan['WB'] = plan['EB']
+    plan['SB'] = plan['NB']
+    for ap, steps in plan.items():
+        for colour in COLOURS:
+            m = bpy.data.materials.get(f'SigLens_{ap}_{colour}')
+            if not m:
+                continue
+            sock = m.node_tree.nodes['Principled BSDF'].inputs['Emission Strength']
+            for f, lit in steps:
+                sock.default_value = _strength(colour, lit)
+                sock.keyframe_insert('default_value', frame=f)
+            for fc in m.node_tree.animation_data.action.fcurves:
+                for kp in fc.keyframe_points:
+                    kp.interpolation = 'CONSTANT'
+
+
+def state_at(approach, frame):
+    from . import config as C
+    if approach in ('EB', 'WB'):
+        if frame < C.t2f(C.SIG_CROSS_AMBER_T):
+            return 'green'
+        return 'amber' if frame < C.t2f(C.SIG_CROSS_RED_T) else 'red'
+    return 'red' if frame < C.t2f(C.SIG_AVE_GREEN_T) else 'green'

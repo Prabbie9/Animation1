@@ -56,3 +56,20 @@ CAM_PITCH_DEG = 3.0
 # --- Reference figures -----------------------------------------------------------
 HUMAN_H = 1.75
 CAR_L, CAR_W, CAR_H = 4.75, 1.85, 1.50      # taxi-class sedan
+
+# --- Signal timing (one clock for signals, traffic and rain: scene frames at 24 fps) -------------
+# The shot sits at the END of the cross-street phase:
+#   cross street (EB/WB): green -> amber at 3.0 s -> red at 6.0 s (3.0 s amber, MUTCD 30 mph)
+#   all-red clearance 6.0 s -> 7.5 s (1.5 s)
+#   avenue (NB/SB): red until 7.5 s, then green
+SIG_CROSS_AMBER_T = 3.0
+SIG_CROSS_RED_T = 6.0
+SIG_AVE_GREEN_T = 7.5
+
+def t2f(t):
+    """seconds into the shot -> scene frame"""
+    return FRAME_START + round(t * FPS)
+
+# Exposure (EV over the physical scene-referred values, see lighting.py units). Set so that the
+# lamp-lit wet asphalt sits around 0.10-0.18 in display values.
+EXPOSURE_EV = 6.5

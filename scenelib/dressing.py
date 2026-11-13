@@ -20,9 +20,11 @@ def build_vehicles(root):
     # Hero taxi: northbound kerb lane, first at the stop line
     L = assets.size('taxi_cvpi')[1]
     v['taxi'] = assets.copy('taxi_cvpi', 'taxi', col, (hw - lane / 2, stop_front(-1) - L / 2, 0), N)
+    v['taxi']['key'] = 'taxi_cvpi'
     # Northbound inner lane: Camry (it arrives and stops during the shot; traffic.py animates it)
     L = assets.size('camry')[1]
     v['camry'] = assets.copy('camry', 'camry', col, (lane / 2, stop_front(-1) - 0.7 - L / 2, 0), N)
+    v['camry']['key'] = 'camry'
     # Southbound queue at the far stop line, facing the camera
     y = stop_front(1)
     for i, (key, lx, gap) in enumerate((('car_suv', -lane / 2, 0.0), ('car_sedan', -lane * 1.5, 0.4),
@@ -33,6 +35,7 @@ def build_vehicles(root):
         else:
             y2 = y + gap + L / 2
         v[f'sb{i}'] = assets.copy(key, f'sb{i}', col, (lx, y2, 0), S)
+        v[f'sb{i}']['key'] = key
     return col, v
 
 

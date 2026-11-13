@@ -12,8 +12,9 @@ sys.path.insert(0, HERE)
 
 import importlib
 import scenelib
-from scenelib import config as C, util, materials, signals, layout, assets, dressing, buildings
-for m in (C, util, materials, signals, layout, assets, dressing, buildings):
+from scenelib import (config as C, util, materials, signals, layout, assets, dressing, buildings,
+                      lighting, surfaces, vehicle_paint)
+for m in (C, util, materials, signals, layout, assets, dressing, buildings, lighting, surfaces, vehicle_paint):
     importlib.reload(m)
 
 
@@ -21,7 +22,7 @@ def parse():
     argv = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
     p = argparse.ArgumentParser()
     p.add_argument('--out', default=os.path.join(HERE, 'scene.blend'))
-    p.add_argument('--stage', default='assets')
+    p.add_argument('--stage', default='lighting')
     p.add_argument('--refs', action='store_true', help='keep the scale reference figures visible')
     return p.parse_args(argv)
 
@@ -55,6 +56,25 @@ def greybox_world(sc):
     sc.collection.objects.link(so)
 
 
+def night(sc, root, vehicles):
+    lighting.world(sc)
+    lighting.street_lights(root)
+    lighting.skyline()
+    surfaces.apply(root)
+    vehicle_paint.apply()
+    sizes = {k: assets.size(k) for k in lighting.VEHICLE_LAMPS}
+    lighting.vehicles(root, vehicles, sizes)
+    signals.animate_cycle()
+    materials.set_wetness(1.0)
+    lighting.colour_management(sc, exposure=C.EXPOSURE_EV)
+    lighting.haze_compositor(sc)
+    cy = sc.cycles
+    cy.sample_clamp_indirect = 6.0
+    cy.blur_glossy = 1.0
+    cy.max_bounces, cy.diffuse_bounces, cy.glossy_bounces, cy.transmission_bounces = 8, 3, 4, 8
+    cy.use_light_tree = True
+
+
 def main():
     a = parse()
     sc = reset()
@@ -73,6 +93,8 @@ def main():
         signals.set_state(ap, st)
     if a.stage in ('greybox', 'assets', 'facades'):
         greybox_world(sc)
+    else:
+        night(sc, root, vehicles)
     bpy.ops.file.pack_all() if False else None
     bpy.ops.wm.save_as_mainfile(filepath=a.out, relative_remap=True, compress=True)
     print('SAVED', a.out)

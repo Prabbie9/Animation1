@@ -302,7 +302,7 @@ def make_sign(text, local, height, max_w, rgb, lit, frame, col, name):
     so.location = p
     so.rotation_euler = (math.pi / 2, 0, ang)
     so.scale = (s, s, 1)
-    mat = M.emissive(f'Sign_{name}', rgb, 6.0 if lit else 0.0, base=tuple(c * 0.4 for c in rgb))
+    mat = M.emissive(f'Sign_{name}', rgb, (900.0 / 683.0) if lit else 0.0, base=tuple(c * 0.4 for c in rgb))
     me.materials.append(mat)
     return so
 
@@ -340,8 +340,44 @@ def make_materials():
     mats['cornice'] = M.simple('Cornice_paint', (0.32, 0.3, 0.27), 0.55, metal=0.3, rough_var=0.15, porosity=0.0)
     mats['window_glass'] = window_glass_material()
     mats['shop_glass'] = M.glass('Shop_glass', rough=0.03)
-    mats['interior'] = M.simple('Shop_interior', (0.55, 0.5, 0.45), 0.6, porosity=0.0)
+    mats['interior'] = shop_interior_material()
     return mats
+
+
+def shop_interior_material():
+    """Shop interiors seen through the glass: shelving bands of mixed products on the walls,
+    darker floor, ceiling a little brighter. Procedural (object-space), varied per object."""
+    m, n, l = M.new('Shop_interior')
+    b = n['Principled BSDF']
+    b.inputs['Roughness'].default_value = 0.6
+    tc = n.new('ShaderNodeTexCoord')
+    sep = n.new('ShaderNodeSeparateXYZ'); l.new(tc.outputs['Object'], sep.inputs['Vector'])
+    # shelf rows every 0.45 m in height
+    zs = n.new('ShaderNodeMath'); zs.operation = 'DIVIDE'; zs.inputs[1].default_value = 0.45
+    l.new(sep.outputs['Z'], zs.inputs[0])
+    zf = n.new('ShaderNodeMath'); zf.operation = 'FLOOR'; l.new(zs.outputs[0], zf.inputs[0])
+    # products: cells of 0.12-0.3 m along the wall, random colour per cell
+    xy = n.new('ShaderNodeMath'); xy.operation = 'ADD'
+    l.new(sep.outputs['X'], xy.inputs[0]); l.new(sep.outputs['Y'], xy.inputs[1])
+    xs = n.new('ShaderNodeMath'); xs.operation = 'DIVIDE'; xs.inputs[1].default_value = 0.17
+    l.new(xy.outputs[0], xs.inputs[0])
+    xf = n.new('ShaderNodeMath'); xf.operation = 'FLOOR'; l.new(xs.outputs[0], xf.inputs[0])
+    cv = n.new('ShaderNodeCombineXYZ'); l.new(xf.outputs[0], cv.inputs['X']); l.new(zf.outputs[0], cv.inputs['Y'])
+    oi = n.new('ShaderNodeObjectInfo'); l.new(oi.outputs['Random'], cv.inputs['Z'])
+    wn = n.new('ShaderNodeTexWhiteNoise'); wn.noise_dimensions = '3D'
+    l.new(cv.outputs['Vector'], wn.inputs['Vector'])
+    hsv = n.new('ShaderNodeHueSaturation')
+    hsv.inputs['Saturation'].default_value = 0.55; hsv.inputs['Value'].default_value = 0.45
+    l.new(wn.outputs['Color'], hsv.inputs['Color'])
+    # shelf edge (dark band at the bottom of each row) and floor/ceiling
+    zr = n.new('ShaderNodeMath'); zr.operation = 'FRACT'; l.new(zs.outputs[0], zr.inputs[0])
+    edge = n.new('ShaderNodeMath'); edge.operation = 'LESS_THAN'; edge.inputs[1].default_value = 0.12
+    l.new(zr.outputs[0], edge.inputs[0])
+    mx = n.new('ShaderNodeMix'); mx.data_type = 'RGBA'
+    l.new(edge.outputs[0], mx.inputs['Factor'])
+    l.new(hsv.outputs['Color'], mx.inputs['A']); mx.inputs['B'].default_value = (0.05, 0.05, 0.05, 1)
+    l.new(mx.outputs['Result'], b.inputs['Base Color'])
+    return m
 
 
 def window_glass_material():
@@ -364,12 +400,13 @@ def window_glass_material():
     cr = ramp.color_ramp
     cr.interpolation = 'CONSTANT'
     cr.elements[0].position = 0.0; cr.elements[0].color = (0, 0, 0, 1)
-    for pos, k, s in ((0.60, 2700, 1.0), (0.80, 3200, 0.6), (0.87, 4500, 0.7), (0.95, 9000, 0.35)):
+    # ~1/3 of windows lit at 11 pm on a weeknight; the rest dark. Lit ones vary in source and
+    # brightness: warm tungsten / warm LED (most), cool LED / fluorescent, and TV-blue flicker.
+    for pos, k, g in ((0.665, 2700, 1.0), (0.745, 2400, 0.45), (0.80, 3000, 0.75), (0.855, 2700, 0.25),
+                      (0.885, 4300, 0.8), (0.925, 6000, 0.55), (0.955, 3500, 0.35), (0.975, 0, 0.3)):
         e = cr.elements.new(pos)
-        rgb = M.blackbody_rgb(k)
-        if k == 9000:
-            rgb = (0.25, 0.4, 1.0)
-        e.color = (rgb[0] * s, rgb[1] * s, rgb[2] * s, 1)
+        rgb = M.blackbody_rgb(k) if k else (0.22, 0.38, 1.0)
+        e.color = (rgb[0] * g, rgb[1] * g, rgb[2] * g, 1)
     l.new(fr.outputs[0], ramp.inputs['Fac'])
     # Window dressing, chosen per window from a second random number:
     #   35 % plain (lit room, brighter toward the ceiling light), 35 % venetian blinds (fine
@@ -420,7 +457,7 @@ def window_glass_material():
     mul.inputs['Factor'].default_value = 1.0
     l.new(ramp.outputs['Color'], mul.inputs['A']); l.new(m2.outputs['Result'], mul.inputs['B'])
     l.new(mul.outputs['Result'], b.inputs['Emission Color'])
-    st = n.new('ShaderNodeValue'); st.name = 'WINDOW_NITS'; st.outputs[0].default_value = 1.5
+    st = n.new('ShaderNodeValue'); st.name = 'WINDOW_NITS'; st.outputs[0].default_value = 28.0 / 683.0  # cd/m2
     l.new(st.outputs[0], b.inputs['Emission Strength'])
     return m
 
@@ -430,6 +467,7 @@ def build_lot(col, name, origin, udir, vdir, W, D, style_name, rng, mats, detail
               lights, extra_facades=(), corner_side=None):
     """One building: facade on the street side (local v=0), mass extending to v=-D.
     extra_facades: [(origin, udir, vdir, W)] additional street facades (corner buildings)."""
+    rng = random.Random(f'{C.SEED}-{name}')     # per-lot stream: edits stay local
     st = STYLES[style_name]
     floors = rng.randint(*st['floors'])
     zb = C.KERB_H
@@ -497,8 +535,9 @@ def _facade(m, W, H, floors, sb_floor, sb_depth, style, rng, detail, zb, signs, 
             u1 = W - pil
         if detail >= 1:
             pool = [t for t in SHOP_TYPES if t[0] not in used or t[0] in ('closed', 'shutter')]
-            w = {'deli': 3, 'bar': 2, 'laundromat': 1, 'pizza': 2, 'pharmacy': 1, 'closed': 5,
-                 'shutter': 1.5, 'vacant': 1}
+            # 11 pm on a weeknight: most shops closed; a deli, a bar or a laundromat still open
+            w = {'deli': 1.6, 'bar': 1.2, 'laundromat': 0.5, 'pizza': 0.8, 'pharmacy': 0.8, 'closed': 6,
+                 'shutter': 2.0, 'vacant': 1.2}
             shop = rng.choices(pool, weights=[w[t[0]] for t in pool])[0]
             used.add(shop[0])
         else:
@@ -647,10 +686,8 @@ def shop_lights(root, lights):
         m = L['frame']
         p = m.P(*L['centre'])
         w, d = L['size']
-        lux = 500 if L['open'] else 80
-        # area light: luminous flux ~ lux * floor area; Blender area light power in W with
-        # ~ 683 lm/W at 555 nm -> watts = lm / 683 * (spectral correction ~1.6 for white)
-        watts = lux * w * d / 683 * 1.6 * 3.0     # x3: losses on dark interior surfaces
+        lux = 220 if L['open'] else 30
+        watts = lux * w * d * 1.5 / 683           # flux = E*A, x1.5 for losses to walls/shelving
         ld = bpy.data.lights.new(f'Shop_{i:02d}', 'AREA')
         ld.shape = 'RECTANGLE'
         ld.size, ld.size_y = max(d, 0.5), max(w, 0.5)    # local X runs along v (depth)
