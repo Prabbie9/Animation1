@@ -442,10 +442,11 @@ def lamp_lights(col, name, v, brake=True):
     found = _lamp_centroids(v['body'])
     out = []
     for side, (c, area) in found.items():
-        # SAE J586 photometry: full intensity on-axis, ~50 % at 20 deg, ~10-20 % beyond 45 deg.
-        # A 100 deg cone with a full blend reproduces that falloff (a uniform 160 deg cone lit the
-        # kerb beside the taxi as brightly as the road behind it: the "glowing kerb").
-        cone = 100.0
+        # SAE J586 photometry: full intensity on-axis, only ~20-35 % required at 20 deg H, little
+        # beyond 45 deg. A 70 deg cone with a full blend approximates that falloff (a uniform
+        # 160 deg cone lit the kerb beside the taxi like the road behind it; 100 deg still turned
+        # the Camry red as it drew alongside).
+        cone = 70.0
         omega = 2 * math.pi * (1 - math.cos(math.radians(cone / 2)))
         ld = bpy.data.lights.new(f'{name}_lamp_{side}', 'SPOT')
         ld['tail_W'] = spot_watts(8.0 * omega, cone)         # tail ~8 cd
@@ -613,3 +614,53 @@ def glare(sc, threshold=1.0, mix=-0.75, size=8):
     t.links.new(src, g.inputs['Image'])
     t.links.new(g.outputs['Image'], comp.inputs['Image'])
     return g
+
+
+def camera_look(sc, dispersion=0.004, vignette=0.12, grain=0.05):
+    """Subtle lens/film artefacts after haze + glare (if a viewer notices them, they're too strong):
+      * chromatic aberration: Lens Distortion dispersion 0.004 (only visible towards the edges)
+      * vignette: ~12 % fall-off in the corners (soft ellipse, heavily blurred)
+      * film grain: luminance-proportional (+-2.5 %), per-pixel, a new pattern every frame
+        (legacy NOISE texture is re-randomised on every evaluation), so it is finer at 4K."""
+    t = sc.node_tree
+    comp = next(n for n in t.nodes if n.type == 'COMPOSITE')
+    src = comp.inputs['Image'].links[0].from_socket
+    ld = t.nodes.new('CompositorNodeLensdist'); ld.name = 'LENS_CA'
+    ld.use_fit = False; ld.use_projector = False; ld.use_jitter = False
+    ld.inputs['Distortion'].default_value = 0.0
+    ld.inputs['Dispersion'].default_value = dispersion
+    t.links.new(src, ld.inputs['Image'])
+    el = t.nodes.new('CompositorNodeEllipseMask')
+    el.width, el.height = 1.15, 1.15
+    bl = t.nodes.new('CompositorNodeBlur'); bl.use_relative = True
+    bl.factor_x = bl.factor_y = 0.35; bl.filter_type = 'GAUSS'
+    t.links.new(el.outputs['Mask'], bl.inputs['Image'])
+    vg = t.nodes.new('CompositorNodeMapRange')
+    vg.inputs['From Min'].default_value = 0.0; vg.inputs['From Max'].default_value = 1.0
+    vg.inputs['To Min'].default_value = 1.0 - vignette; vg.inputs['To Max'].default_value = 1.0
+    t.links.new(bl.outputs['Image'], vg.inputs['Value'])
+    mv = t.nodes.new('CompositorNodeMixRGB'); mv.blend_type = 'MULTIPLY'; mv.name = 'VIGNETTE'
+    mv.inputs['Fac'].default_value = 1.0
+    t.links.new(ld.outputs['Image'], mv.inputs[1]); t.links.new(vg.outputs['Value'], mv.inputs[2])
+    tex = bpy.data.textures.get('FilmGrain') or bpy.data.textures.new('FilmGrain', 'NOISE')
+    tn = t.nodes.new('CompositorNodeTexture'); tn.texture = tex
+    gm = t.nodes.new('CompositorNodeMapRange')
+    gm.inputs['From Min'].default_value = 0.0; gm.inputs['From Max'].default_value = 1.0
+    gm.inputs['To Min'].default_value = 1.0 - grain / 2; gm.inputs['To Max'].default_value = 1.0 + grain / 2
+    t.links.new(tn.outputs['Value'], gm.inputs['Value'])
+    mg = t.nodes.new('CompositorNodeMixRGB'); mg.blend_type = 'MULTIPLY'; mg.name = 'GRAIN'
+    mg.inputs['Fac'].default_value = 1.0
+    t.links.new(mv.outputs['Image'], mg.inputs[1]); t.links.new(gm.outputs['Value'], mg.inputs[2])
+    t.links.new(mg.outputs['Image'], comp.inputs['Image'])
+
+
+def motion_blur(sc, vehicles):
+    """180-degree shutter (shutter = 0.5 frame), centred on the frame. Wheels get 3 motion steps
+    (they turn up to ~40 deg while the shutter is open). Rain streaks have motion blur disabled:
+    their length already models the shutter."""
+    sc.render.use_motion_blur = True
+    sc.render.motion_blur_shutter = 0.5
+    sc.render.motion_blur_position = 'CENTER'
+    for v in vehicles.values():
+        for w in v['wheels'].values():
+            w.cycles.motion_steps = 3

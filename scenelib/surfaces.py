@@ -169,6 +169,14 @@ def asphalt():
     pud = g.maprange(g.math('SUBTRACT', g.math('ADD', dep, g.math('MULTIPLY', wheel, 0.05)), pud_th),
                      0.0, 0.025, 0.0, 1.0)
     water = g.math('MAXIMUM', gwater, pud, clamp=True)
+    # foreground puddle in the settled edge of the trench patch: ellipse with a noisy shoreline
+    cx, cy, rx, ry = C.FG_PUDDLE
+    ex = g.math('DIVIDE', g.math('SUBTRACT', X, cx), rx)
+    ey = g.math('DIVIDE', g.math('SUBTRACT', Y, cy), ry)
+    er = g.math('SQRT', g.math('ADD', g.math('MULTIPLY', ex, ex), g.math('MULTIPLY', ey, ey)))
+    shore = g.math('ADD', er, g.math('MULTIPLY', g.math('SUBTRACT', g.noise(obj, 2.2, 3.0), 0.5), 0.6))
+    fgp = g.maprange(shore, 0.75, 1.0, 1.0, 0.0, smooth=True)
+    water = g.math('MAXIMUM', water, fgp, clamp=True)
     amount = n.new('ShaderNodeValue'); amount.name = 'PUDDLE_AMOUNT'; amount.outputs[0].default_value = 1.0
     water = g.math('MULTIPLY', water, amount.outputs[0])
     # water depth proxy: deeper in the middle -> smoother; edges are thin films (rougher)
@@ -219,7 +227,7 @@ def repairs(root, rng):
     pm, tm = asphalt_patch(), tar_seal()
     z = 0.003
     patches = [   # (x0, y0, x1, y1)
-        (0.4, -24.5, 6.4, -22.6),          # trench across the northbound lanes (camera's path)
+        C.TRENCH_PATCH,                    # settled trench across the NB lanes (see config.FG_PUDDLE)
         (-6.4, 21.0, -2.0, 23.4),
         (2.2, -41.0, 4.2, -33.0),          # longitudinal cut along a lane
         (-5.6, 34.0, -3.6, 40.0),

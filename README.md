@@ -71,32 +71,48 @@ ffmpeg -framerate 24 -i renders/frames/frame_%04d.png -c:v libx264 -preset slow 
 
 ## 3. Quality / speed ladder
 
-| `--quality` | max samples | noise threshold | bounces (max/diff/gloss/trans) | use |
-|---|---|---|---|---|
-| `final` (default) | 512 | 0.010 | 8/3/4/8 | delivery |
-| `balanced` | 320 | 0.015 | 8/3/4/8 | ~35 % faster, rarely distinguishable after denoising |
-| `fast` | 192 | 0.025 | 6/2/3/6 | ~60 % faster, a little blotchy in dark corners |
-| `draft` | 64 | 0.050 | 4/2/2/4 | layout and animation checks |
+All presets render 3840×2160 unless you add `--scale`. All use adaptive sampling (minimum
+samples automatic), OpenImageDenoise with **prefilter Accurate, albedo + normal guides, quality
+High, on the GPU**, indirect clamp 3.0, glossy filter 1.0, light tree on, persistent data on, a
+180° motion-blur shutter, and 16-bit PNG output. Only the sampling and bounce limits change:
 
-More levers, from the most effective:
+| `--quality` | max samples | adaptive noise threshold | bounces: total / diffuse / glossy / transmission | expected time vs `final`* | what you give up |
+|---|---|---|---|---|---|
+| `final` (default) | 512 | 0.010 | 8 / 3 / 4 / 8 | 1.0× | nothing: the reference |
+| `balanced` | 320 | 0.015 | 8 / 3 / 4 / 8 | ~0.6–0.65× | slightly softer fine grain in the darkest areas (shadowed facades, the road under the cars); the denoiser fills in a little more. Hard to see in motion. |
+| `fast` | 192 | 0.025 | 6 / 2 / 3 / 6 | ~0.35–0.45× | visibly smoother, slightly "painted" texture in dark regions; reflections of the small lamps in the wet road can soften and shimmer a little between frames; one fewer diffuse bounce makes the deepest corners (shop interiors, under awnings) a touch darker |
+| `draft` | 64 | 0.050 | 4 / 2 / 2 / 4 | ~0.15× | blotchy denoising, unstable reflections: layout/animation checks only |
 
-1. `--scale 75` renders at 2880×1620 (0.56× the pixels). Upscale in the edit if needed.
-2. `--quality balanced`.
-3. `--samples N` to override the sample cap for any quality level.
+\*Time scales roughly with the sample cap, but adaptive sampling stops many pixels early, so the
+real ratios on the 7800 XT are unknown until the `--frame 96` benchmark is run. Treat these as
+estimates.
 
-Adaptive sampling stops early in clean areas, and OpenImageDenoise (High quality, on the GPU)
-runs on every frame using albedo and normal passes. Indirect light is clamped (3.0) and glossy
-filtering is on. Small emitters (lamp lenses, signals, brake lamps) are visible to the camera
-only, with matching small lights doing the lighting and the reflections. This cut the
-noise in the wet-road reflections 14× (see `docs/stages/05_materials_rain/REVIEW.md`).
+Resolution is the other big lever:
 
-Target: ≤ 2 min/frame at 4K on the 7800 XT (≈ 6.5 h for 192 frames). The estimate for this
-scene is in `REPORT.md`, together with how it was derived.
+| `--scale` | resolution | pixels vs 4K | what you give up |
+|---|---|---|---|
+| 100 | 3840×2160 | 1.0× | – |
+| 75 | 2880×1620 | 0.56× | a slight softening after upscaling to 4K; rain streaks and brick texture lose some crispness. Generally less visible than dropping from `final` to `fast`. |
+| 50 | 1920×1080 | 0.25× | a 1080p deliverable |
+
+Suggested order if the benchmark is over budget (2 min/frame): first `--quality balanced`,
+then `--scale 75`, then both, then `--quality fast`. `--samples N` overrides the cap of any
+preset.
+
+Noise notes: small emitters (street-lamp lenses, signal lenses, brake lamps, headlamp glass)
+are visible to the camera only, and matching small lights do the lighting and the
+reflections. This cut the noise in the wet-road reflections 14× (see
+`docs/stages/05_materials_rain/REVIEW.md`). The remaining temporal variation on the road is
+the intended ripple/runoff animation (`docs/stages/06_traffic/REVIEW.md`).
 
 ### VRAM
-Repeated assets are instanced, textures are capped at 2K (the 4K asphalt is the only
-exception), and `use_persistent_data` keeps the BVH between frames. The expected VRAM use is
-well below 12 GB. If you hit out-of-memory errors, use `--scale 75`.
+Estimated peak at 4K: **~4.9 GB** (run `blender -b scene.blend -P tools/vram_estimate.py`).
+That covers textures 0.9 GB (102 images, no mipmaps on GPU; the three 4K asphalt maps are the
+largest at 64 MB each), geometry 0.24 GB (1.24 M unique triangles, 30 k instances including
+the rain), 4K render buffers 0.76 GB, GPU OIDN ~2 GB, and runtime overhead ~1 GB. Repeated
+assets are instanced and textures are capped at 2K (asphalt excepted). If you ever hit
+out-of-memory errors: first `--scale 75`, then set the OIDN denoiser to the CPU, then reduce
+the two scanned pedestrians and the newspaper-box scan (0.7 M triangles together).
 
 ## 4. `render.py` options
 

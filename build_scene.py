@@ -70,6 +70,7 @@ def night(sc, root, vehicles):
     lighting.colour_management(sc, exposure=C.EXPOSURE_EV)
     lighting.haze_compositor(sc)
     lighting.glare(sc, threshold=6.0, mix=-0.92, size=5)
+    lighting.camera_look(sc)
     cy = sc.cycles
     cy.sample_clamp_indirect = 3.0
     cy.blur_glossy = 1.0
@@ -101,6 +102,7 @@ def main():
     else:
         night(sc, root, vehicles)
         traffic.animate(vehicles, specs)
+        lighting.motion_blur(sc, vehicles)
     bpy.ops.file.pack_all() if False else None
     bpy.ops.wm.save_as_mainfile(filepath=a.out, relative_remap=True, compress=True)
     print('SAVED', a.out)

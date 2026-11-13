@@ -53,7 +53,21 @@ def streak_material():
     a = n.new('ShaderNodeMath'); a.operation = 'MULTIPLY'; a.inputs[1].default_value = 0.6
     l.new(sn.outputs[0], a.inputs[0])
     mx = n.new('ShaderNodeMixShader')
-    l.new(a.outputs[0], mx.inputs['Fac']); l.new(tp.outputs[0], mx.inputs[1]); l.new(ad.outputs[0], mx.inputs[2])
+    # distance falloff: drops further away are smaller on screen, lit less directly and seen
+    # through more haze -> fainter. Opacity x1.0 within 4 m, x0.3 by 35 m (camera distance).
+    cd_ = n.new('ShaderNodeCameraData')
+    fall = n.new('ShaderNodeMapRange')
+    fall.inputs['From Min'].default_value = 4.0; fall.inputs['From Max'].default_value = 35.0
+    fall.inputs['To Min'].default_value = 1.0; fall.inputs['To Max'].default_value = 0.3
+    l.new(cd_.outputs['View Distance'], fall.inputs['Value'])
+    af = n.new('ShaderNodeMath'); af.operation = 'MULTIPLY'
+    l.new(a.outputs[0], af.inputs[0]); l.new(fall.outputs['Result'], af.inputs[1])
+    l.new(af.outputs[0], mx.inputs['Fac']); l.new(tp.outputs[0], mx.inputs[1]); l.new(ad.outputs[0], mx.inputs[2])
+    # far streaks also softer: the glossy part gets rougher with distance
+    gr = n.new('ShaderNodeMapRange')
+    gr.inputs['From Min'].default_value = 4.0; gr.inputs['From Max'].default_value = 35.0
+    gr.inputs['To Min'].default_value = 0.08; gr.inputs['To Max'].default_value = 0.35
+    l.new(cd_.outputs['View Distance'], gr.inputs['Value']); l.new(gr.outputs['Result'], gl.inputs['Roughness'])
     l.new(mx.outputs[0], out.inputs['Surface'])
     return m
 
@@ -143,6 +157,7 @@ def rain_streaks(col, cam, proto, box_min, box_max, count, seed, name):
     ob.visible_shadow = False
     ob.visible_glossy = False
     ob.visible_diffuse = False
+    ob.cycles.use_motion_blur = False
     return ob
 
 
@@ -214,6 +229,7 @@ def awning_drips(col, cam, proto, edges, rng):
     ob.visible_shadow = False
     ob.visible_glossy = False
     ob.visible_diffuse = False
+    ob.cycles.use_motion_blur = False
     return ob
 
 
@@ -487,8 +503,8 @@ def build(root, cam, vehicles, road_mat, awning_edges):
     sm = streak_material()
     proto = streak_proto(col, sm)
     # near box: dense, where streaks are resolved; far box: sparse (haze takes over beyond)
-    rain_streaks(col, cam, proto, (-7.0, -28.0, 0.0), (13.0, -6.0, 9.0), 22000, 11, 'RainNear')
-    rain_streaks(col, cam, proto, (-12.0, -6.0, 0.0), (14.0, 40.0, 16.0), 18000, 23, 'RainFar')
+    rain_streaks(col, cam, proto, (-7.0, -28.0, 0.0), (13.0, -6.0, 9.0), 15500, 11, 'RainNear')
+    rain_streaks(col, cam, proto, (-12.0, -6.0, 0.0), (14.0, 40.0, 16.0), 12500, 23, 'RainFar')
     awning_drips(col, cam, streak_proto(col, sm, name='DripProto'), awning_edges, random.Random(C.SEED + 9))
     water_surface_animation(road_mat)
     if bpy.data.materials.get('Asphalt_patch'):

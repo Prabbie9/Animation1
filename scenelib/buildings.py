@@ -338,7 +338,8 @@ def make_materials():
     mats['frame'] = M.simple('Window_frame', (0.05, 0.05, 0.05), 0.45, rough_var=0.1, porosity=0.0)
     mats['shopframe'] = M.simple('Shop_frame', (0.12, 0.12, 0.12), 0.35, metal=0.8, rough_var=0.15, porosity=0.0)
     mats['fascia'] = M.simple('Shop_fascia', (0.08, 0.08, 0.09), 0.4, rough_var=0.1, porosity=0.0)
-    mats['awning'] = M.simple('Awning_fabric', (0.12, 0.03, 0.03), 0.7, rough_var=0.1, porosity=1.0)
+    # fabric: soaks and darkens but has no mirror film (porosity sets the coat): soft sheen only
+    mats['awning'] = M.simple('Awning_fabric', (0.12, 0.03, 0.03), 0.75, rough_var=0.1, porosity=0.15)
     mats['shutter'] = M.pbr('Shutter', 'painted_metal_shutter', 1.5, tint=(0.7, 0.7, 0.72), tint_var=0.2)
     mats['steel'] = M.simple('FireEscape_steel', (0.02, 0.02, 0.02), 0.55, metal=0.6, rough_var=0.2, porosity=0.0)
     mats['roof'] = M.simple('Roof_tar', (0.04, 0.04, 0.04), 0.85, porosity=0.3)

@@ -73,3 +73,12 @@ def t2f(t):
 # Exposure (EV over the physical scene-referred values, see lighting.py units). Set so that the
 # lamp-lit wet asphalt sits around 0.10-0.18 in display values.
 EXPOSURE_EV = 6.5
+
+# Foreground puddle: a utility trench patch across the NB lanes has settled, so the rutted wheel
+# paths of the kerb lane just north of it form a shallow depression that holds water. It sits on
+# the mirror line between the camera and the taxi's tail lamps (reflection point of a 0.9 m
+# lamp seen from 1.85 m: 2/3 of the way to the lamp -> (5.2, -20.4) at the dolly start,
+# (5.2, -19.9) at the end), so it reflects the lamps instead of dark facades. No moving tyre
+# crosses it (the Camry's right wheels run at x ~ 2.4).
+TRENCH_PATCH = (0.4, -23.3, 6.4, -21.5)        # x0, y0, x1, y1
+FG_PUDDLE = (5.0, -20.6, 0.95, 0.75)           # centre x, y, radius x, radius y (m)

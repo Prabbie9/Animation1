@@ -52,10 +52,13 @@ LENS_CD = 600.0      # LED 300 mm signal, on-axis luminous intensity (ITE VTCSH:
 def lens_light(name, col, approach, colour, loc):
     """Small forward spot (60 deg) in front of a lens, so the road reflection is a clean,
     directly sampled light. Its power is keyed together with the lens emission."""
-    cone = 60.0
+    # ITE VTCSH photometry: on-axis peak, ~50 % at 10 deg, ~15-20 % at 20 deg; the visor cuts
+    # light above the horizontal. A 44 deg cone with a full blend matches that falloff (the
+    # former 60 deg / 0.6 blend lit the awnings off-axis almost at full strength).
+    cone = 44.0
     omega = 2 * math.pi * (1 - math.cos(math.radians(cone / 2)))
     ld = bpy.data.lights.new(name, 'SPOT')
-    ld.spot_size = math.radians(cone); ld.spot_blend = 0.6
+    ld.spot_size = math.radians(cone); ld.spot_blend = 1.0
     ld.shadow_soft_size = 0.12
     ld.color = COLOURS[colour]
     ld['full_energy'] = LENS_CD * omega / 683.0 * 4 * math.pi / omega
@@ -64,7 +67,7 @@ def lens_light(name, col, approach, colour, loc):
     o = bpy.data.objects.new(name, ld)
     col.objects.link(o)
     o.location = loc
-    o.rotation_euler = (math.radians(-90), 0, 0)     # spot axis -Z -> -Y (out of the lens)
+    o.rotation_euler = (math.radians(-86), 0, 0)     # spot axis -Z -> -Y (out of the lens), 4 deg down
     o.visible_camera = False
     return o
 
