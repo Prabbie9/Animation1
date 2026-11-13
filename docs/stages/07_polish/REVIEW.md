@@ -61,3 +61,18 @@ lighter versions of the two scanned pedestrians and the newspaper-box scan (0.7 
   and HIP-RT when Blender lists them.
 * `encode.sh`: h264 (High, yuv420p, 24 fps), h265 (Main 10) and prores (422 HQ, 10-bit) all
   produced valid files.
+
+## Round P3 (`P3_f096.png`) and the full preview
+* f96 after the distant-rain fix: rain reads as steady light rain, visible but not dominant.
+* Full shot preview, 192 frames at 960×540, 12 spp (CPU, ~30 s/frame): `docs/preview/
+  preview_full_960x540.mp4`; contact sheet `docs/preview/contact_sheet_every8.jpg`. The
+  timeline reads correctly from start to end.
+* Flicker on two 24-frame preview windows (f100–123, f160–183): flat per-frame curves; the only
+  spike is f179–181, where the avenue signals switch to green and the reflections change colour.
+  The absolute levels include 12-spp noise, rain and camera motion, so they are not comparable
+  with the static 256-spp test.
+
+## Render-time reference measurement
+Blender's standard BMW27 scene (`bmw27_gpu.blend`, 960×540, 1225 spp) took 531.9 s on this
+CPU, against 17.3 s published for an RX 7800 XT with HIP in Blender 4.2 → ~31× ratio. Full
+derivation in `REPORT.md`.

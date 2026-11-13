@@ -26,6 +26,9 @@ if o.cam:
     co.rotation_euler = [math.radians(v) for v in o.cam[3:]]; cd.lens = o.lens; sc.camera = co
 os.makedirs(o.out, exist_ok=True)
 for f in range(o.start, o.end + 1, o.step):
+    out_f = os.path.join(o.out, f'f{f:04d}.png')
+    if os.path.exists(out_f) and os.path.getsize(out_f) > 1024:      # resume: keep finished frames
+        continue
     t0 = time.time()
     sc.frame_set(f)
     r.filepath = os.path.join(o.out, f'f{f:04d}.png')

@@ -4,8 +4,10 @@ A US four-way intersection at about 11 pm on a late-autumn night in steady light
 camera dollies 3 m along the kerb towards a taxi waiting at a red light, while the cross street's
 signal runs out its amber.
 
-> **Status:** work in progress. See `docs/stages/` for the review renders of each stage and
-> `REPORT.md` (written at the end) for the honest assessment.
+> **Status:** built and verified with CPU test renders; the final 4K render is pending a GPU
+> benchmark. Preview of the whole shot (960×540, 12 spp, CPU):
+> `docs/preview/preview_full_960x540.mp4`, plus `docs/preview/contact_sheet_every8.jpg`. The honest assessment and the
+> render-time estimate are in `REPORT.md`; per-stage review renders are in `docs/stages/`.
 
 ## 1. Quick start
 
