@@ -2,3 +2,4 @@ renders/
 *.blend1
 __pycache__/
 assets/_downloads/
+assets/sketchfab/

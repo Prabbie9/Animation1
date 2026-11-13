@@ -12,8 +12,8 @@ sys.path.insert(0, HERE)
 
 import importlib
 import scenelib
-from scenelib import config as C, util, signals, layout
-for m in (C, util, signals, layout):
+from scenelib import config as C, util, materials, signals, layout, assets, dressing, buildings
+for m in (C, util, materials, signals, layout, assets, dressing, buildings):
     importlib.reload(m)
 
 
@@ -21,7 +21,8 @@ def parse():
     argv = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
     p = argparse.ArgumentParser()
     p.add_argument('--out', default=os.path.join(HERE, 'scene.blend'))
-    p.add_argument('--stage', default='greybox')
+    p.add_argument('--stage', default='assets')
+    p.add_argument('--refs', action='store_true', help='keep the scale reference figures visible')
     return p.parse_args(argv)
 
 
@@ -59,11 +60,18 @@ def main():
     sc = reset()
     root = bpy.data.collections.new('Set')
     sc.collection.children.link(root)
-    info = layout.build(root)
+    info = layout.build(root, greybox=(a.stage == 'greybox'))
+    if a.stage != 'greybox':
+        buildings.build(root)
+    vehicles = dressing.build(root)
+    if a.stage != 'greybox' and not a.refs:
+        bpy.data.collections['Reference'].hide_render = True
+        for o in bpy.data.collections['Reference'].objects:
+            o.hide_viewport = True
     # Frame-1 phase: avenue (NB/SB) red, cross street (EB/WB) green.
     for ap, st in (('NB', 'red'), ('SB', 'red'), ('EB', 'green'), ('WB', 'green')):
         signals.set_state(ap, st)
-    if a.stage == 'greybox':
+    if a.stage in ('greybox', 'assets', 'facades'):
         greybox_world(sc)
     bpy.ops.file.pack_all() if False else None
     bpy.ops.wm.save_as_mainfile(filepath=a.out, relative_remap=True, compress=True)

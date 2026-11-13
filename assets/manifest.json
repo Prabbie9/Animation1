@@ -1,0 +1,328 @@
+{
+ "assets": [
+  {
+   "key": "taxi_cvpi",
+   "source": "sketchfab",
+   "uid": "2429a825ff1646568e8e6e1453f9c501",
+   "path": "assets/sketchfab/taxi_cvpi/model.glb",
+   "title": "2001 Crown Victoria Taxi Game Prop",
+   "author": "8sianDude",
+   "license": "CC-BY-4.0",
+   "url": "https://sketchfab.com/3d-models/2001-crown-victoria-taxi-game-prop-2429a825ff1646568e8e6e1453f9c501",
+   "use": "hero taxi"
+  },
+  {
+   "key": "car_pack",
+   "source": "sketchfab",
+   "uid": "20f9af9b8a404d5cb022ac6fe87f21f5",
+   "path": "assets/sketchfab/car_pack/model.glb",
+   "title": "Generic passenger car pack",
+   "author": "Comrade1280",
+   "license": "CC-BY-4.0",
+   "url": "https://sketchfab.com/3d-models/generic-passenger-car-pack-20f9af9b8a404d5cb022ac6fe87f21f5",
+   "use": "parked and background cars (sedan, hatchback, wagon, SUV, minivan, pickup)"
+  },
+  {
+   "key": "service_pack",
+   "source": "sketchfab",
+   "uid": "8ff2a13f30914932a70c7950cfa58465",
+   "path": "assets/sketchfab/service_pack/model.glb",
+   "title": "Generic civil service vehicles pack",
+   "author": "Comrade1280",
+   "license": "CC-BY-4.0",
+   "url": "https://sketchfab.com/3d-models/generic-civil-service-vehicles-pack-8ff2a13f30914932a70c7950cfa58465",
+   "unused": "city bus is under-scaled (2.5 m tall vs ~3.2 m real); no vehicle from this pack is used"
+  },
+  {
+   "key": "camry",
+   "source": "sketchfab",
+   "uid": "236a5a6e2fa6420fbdf641f4800cd544",
+   "path": "assets/sketchfab/camry/model.glb",
+   "title": "Toyota Camry 2020",
+   "author": "ItsDiyor",
+   "license": "CC-BY-4.0",
+   "url": "https://sketchfab.com/3d-models/toyota-camry-2020-236a5a6e2fa6420fbdf641f4800cd544",
+   "use": "northbound car that stops beside the taxi"
+  },
+  {
+   "key": "hydrant",
+   "source": "sketchfab",
+   "uid": "d021f42ea8c44afe9c90655beaa36d89",
+   "path": "assets/sketchfab/hydrant/model.glb",
+   "title": "American fire hydrant",
+   "author": "Fayruso",
+   "license": "CC-BY-4.0",
+   "url": "https://sketchfab.com/3d-models/american-fire-hydrant-d021f42ea8c44afe9c90655beaa36d89",
+   "use": "fire hydrants"
+  },
+  {
+   "key": "newsbox",
+   "source": "sketchfab",
+   "uid": "8975781045254725850af6ef43dfeca5",
+   "path": "assets/sketchfab/newsbox/model.glb",
+   "title": "Newspaper boxes",
+   "author": "Keith Ito",
+   "license": "CC-BY-4.0",
+   "url": "https://sketchfab.com/3d-models/newspaper-boxes-8975781045254725850af6ef43dfeca5",
+   "use": "newspaper boxes"
+  },
+  {
+   "key": "cityprops2",
+   "source": "sketchfab",
+   "uid": "2f52ea53c58e455f9b69d11f58763c96",
+   "path": "assets/sketchfab/cityprops2/model.glb",
+   "title": "City Props Collection (volume 2)",
+   "author": "TampaJoey",
+   "license": "CC-BY-4.0",
+   "url": "https://sketchfab.com/3d-models/city-props-collection-volume-2-2f52ea53c58e455f9b69d11f58763c96",
+   "use": "litter bins, manhole covers"
+  },
+  {
+   "key": "ped_nathan",
+   "source": "sketchfab",
+   "uid": "143a2b1ea5eb4385ae90a73657aca3bc",
+   "path": "assets/sketchfab/ped_nathan/model.glb",
+   "title": "Nathan Animated 003 - Walking 3D Man",
+   "author": "Renderpeople",
+   "license": "CC-BY-4.0",
+   "url": "https://sketchfab.com/3d-models/nathan-animated-003-walking-3d-man-143a2b1ea5eb4385ae90a73657aca3bc",
+   "unused": "T-shirt is implausible for 8 \u00b0C rain"
+  },
+  {
+   "key": "ped_mei",
+   "source": "sketchfab",
+   "uid": "07f308b81bc045c8917104a72ce2ffe4",
+   "path": "assets/sketchfab/ped_mei/model.glb",
+   "title": "Mei Posed 001 - Female Walking Business Model",
+   "author": "Renderpeople",
+   "license": "CC-BY-4.0",
+   "url": "https://sketchfab.com/3d-models/mei-posed-001-female-walking-business-model-07f308b81bc045c8917104a72ce2ffe4",
+   "unused": "short-sleeved shirt, carries a binder; implausible for night rain"
+  },
+  {
+   "key": "ped_gent_umbrella",
+   "source": "sketchfab",
+   "uid": "22a8c1dbc5bb48858ee8b9ae53b39e04",
+   "path": "assets/sketchfab/ped_gent_umbrella/model.glb",
+   "title": "Rainy Day Gentleman",
+   "author": "restore50",
+   "license": "CC-BY-4.0",
+   "url": "https://sketchfab.com/3d-models/rainy-day-gentleman-22a8c1dbc5bb48858ee8b9ae53b39e04",
+   "use": "pedestrian in long coat (waiting, distant)"
+  },
+  {
+   "key": "ped_winter_umbrella",
+   "source": "sketchfab",
+   "uid": "4a79933ca4cc4ef1ba362f93447bf4a4",
+   "path": "assets/sketchfab/ped_winter_umbrella/model.glb",
+   "title": "Winter Outfit with Umbrella",
+   "author": "restore50",
+   "license": "CC-BY-4.0",
+   "url": "https://sketchfab.com/3d-models/winter-outfit-with-umbrella-4a79933ca4cc4ef1ba362f93447bf4a4",
+   "use": "pedestrian with open umbrella (waiting, distant)"
+  },
+  {
+   "key": "asphalt_02",
+   "source": "polyhaven",
+   "id": "asphalt_02",
+   "kind": "texture",
+   "res": "4k",
+   "maps": [
+    "Diffuse",
+    "Rough",
+    "nor_gl",
+    "Displacement"
+   ],
+   "path": "assets/polyhaven/asphalt_02",
+   "title": "asphalt_02",
+   "author": "Poly Haven",
+   "license": "CC0-1.0",
+   "url": "https://polyhaven.com/a/asphalt_02",
+   "use": "road surface"
+  },
+  {
+   "key": "asphalt_04",
+   "source": "polyhaven",
+   "id": "asphalt_04",
+   "kind": "texture",
+   "res": "2k",
+   "maps": [
+    "Diffuse",
+    "Rough",
+    "nor_gl",
+    "Displacement"
+   ],
+   "path": "assets/polyhaven/asphalt_04",
+   "title": "asphalt_04",
+   "author": "Poly Haven",
+   "license": "CC0-1.0",
+   "url": "https://polyhaven.com/a/asphalt_04",
+   "use": "asphalt patches / repairs"
+  },
+  {
+   "key": "concrete_pavement",
+   "source": "polyhaven",
+   "id": "concrete_pavement",
+   "kind": "texture",
+   "res": "2k",
+   "maps": [
+    "Diffuse",
+    "Rough",
+    "nor_gl",
+    "Displacement"
+   ],
+   "path": "assets/polyhaven/concrete_pavement",
+   "title": "concrete_pavement",
+   "author": "Poly Haven",
+   "license": "CC0-1.0",
+   "url": "https://polyhaven.com/a/concrete_pavement",
+   "use": "sidewalk slabs"
+  },
+  {
+   "key": "brushed_concrete",
+   "source": "polyhaven",
+   "id": "brushed_concrete",
+   "kind": "texture",
+   "res": "2k",
+   "maps": [
+    "Diffuse",
+    "Rough",
+    "nor_gl",
+    "Displacement"
+   ],
+   "path": "assets/polyhaven/brushed_concrete",
+   "title": "brushed_concrete",
+   "author": "Poly Haven",
+   "license": "CC0-1.0",
+   "url": "https://polyhaven.com/a/brushed_concrete",
+   "use": "kerbs"
+  },
+  {
+   "key": "brick_wall_02",
+   "source": "polyhaven",
+   "id": "brick_wall_02",
+   "kind": "texture",
+   "res": "2k",
+   "maps": [
+    "Diffuse",
+    "Rough",
+    "nor_gl",
+    "Displacement"
+   ],
+   "path": "assets/polyhaven/brick_wall_02",
+   "title": "brick_wall_02",
+   "author": "Poly Haven",
+   "license": "CC0-1.0",
+   "url": "https://polyhaven.com/a/brick_wall_02",
+   "use": "facades"
+  },
+  {
+   "key": "brick_wall_10",
+   "source": "polyhaven",
+   "id": "brick_wall_10",
+   "kind": "texture",
+   "res": "2k",
+   "maps": [
+    "Diffuse",
+    "Rough",
+    "nor_gl",
+    "Displacement"
+   ],
+   "path": "assets/polyhaven/brick_wall_10",
+   "title": "brick_wall_10",
+   "author": "Poly Haven",
+   "license": "CC0-1.0",
+   "url": "https://polyhaven.com/a/brick_wall_10",
+   "use": "facades"
+  },
+  {
+   "key": "red_brick_plaster_patch_02",
+   "source": "polyhaven",
+   "id": "red_brick_plaster_patch_02",
+   "kind": "texture",
+   "res": "2k",
+   "maps": [
+    "Diffuse",
+    "Rough",
+    "nor_gl",
+    "Displacement"
+   ],
+   "path": "assets/polyhaven/red_brick_plaster_patch_02",
+   "title": "red_brick_plaster_patch_02",
+   "author": "Poly Haven",
+   "license": "CC0-1.0",
+   "url": "https://polyhaven.com/a/red_brick_plaster_patch_02",
+   "use": "facades"
+  },
+  {
+   "key": "concrete_tile_facade",
+   "source": "polyhaven",
+   "id": "concrete_tile_facade",
+   "kind": "texture",
+   "res": "2k",
+   "maps": [
+    "Diffuse",
+    "Rough",
+    "nor_gl",
+    "Displacement"
+   ],
+   "path": "assets/polyhaven/concrete_tile_facade",
+   "title": "concrete_tile_facade",
+   "author": "Poly Haven",
+   "license": "CC0-1.0",
+   "url": "https://polyhaven.com/a/concrete_tile_facade",
+   "use": "facades"
+  },
+  {
+   "key": "painted_metal_shutter",
+   "source": "polyhaven",
+   "id": "painted_metal_shutter",
+   "kind": "texture",
+   "res": "2k",
+   "maps": [
+    "Diffuse",
+    "Rough",
+    "nor_gl",
+    "Displacement"
+   ],
+   "path": "assets/polyhaven/painted_metal_shutter",
+   "title": "painted_metal_shutter",
+   "author": "Poly Haven",
+   "license": "CC0-1.0",
+   "url": "https://polyhaven.com/a/painted_metal_shutter",
+   "use": "shop roller shutters"
+  },
+  {
+   "key": "metal_plate",
+   "source": "polyhaven",
+   "id": "metal_plate",
+   "kind": "texture",
+   "res": "1k",
+   "maps": [
+    "Diffuse",
+    "Rough",
+    "nor_gl",
+    "Displacement"
+   ],
+   "path": "assets/polyhaven/metal_plate",
+   "title": "metal_plate",
+   "author": "Poly Haven",
+   "license": "CC0-1.0",
+   "url": "https://polyhaven.com/a/metal_plate",
+   "use": "steel plates / grates"
+  },
+  {
+   "key": "kloppenheim_04",
+   "source": "polyhaven",
+   "id": "kloppenheim_04",
+   "kind": "hdri",
+   "res": "2k",
+   "path": "assets/polyhaven/hdri/kloppenheim_04_2k.exr",
+   "title": "Kloppenheim 04",
+   "author": "Poly Haven",
+   "license": "CC0-1.0",
+   "url": "https://polyhaven.com/a/kloppenheim_04",
+   "use": "night sky glow (environment)"
+  }
+ ]
+}

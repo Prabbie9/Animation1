@@ -102,14 +102,14 @@ def build_markings(root):
     return col
 
 
-def build_buildings(root, rng):
+def build_buildings(root, rng, greybox=True):
     """Grey-box building masses along both frontages of each block, plus a distant skyline."""
     col = collection('Buildings', root)
     mats = [flat_mat(f'GB_bldg{i}', (v, v, v * 0.97), 0.8) for i, v in
             enumerate((0.35, 0.42, 0.5, 0.3, 0.46))]
     hw, hs = C.AVE_HALF + C.SIDEWALK, C.CROSS_HALF + C.SIDEWALK
     bid = 0
-    for sx, sy in QUADS:
+    for sx, sy in (QUADS if greybox else ()):
         ylen = C.AVE_LEN_N if sy > 0 else C.AVE_LEN_S
         # Avenue frontage
         y = hs
@@ -263,12 +263,13 @@ def build_camera(root, focus_point):
     return cam
 
 
-def build(root):
+def build(root, greybox=False):
     rng = random.Random(C.SEED)
     build_ground(root)
     build_markings(root)
-    build_buildings(root, rng)
+    build_buildings(root, rng, greybox)
     _, lamps, heads = build_poles(root)
     _, (cx, cy) = build_reference(root)
-    cam = build_camera(root, (cx, cy - C.CAR_L / 2, 0.9))
+    taxi_rear = -(C.stopline_pos(C.CROSS_HALF) + C.STOPLINE_W / 2 + 0.6) - 5.39
+    cam = build_camera(root, (cx, taxi_rear, 0.9))
     return dict(lamps=lamps, heads=heads, camera=cam)

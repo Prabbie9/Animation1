@@ -1,0 +1,29 @@
+{
+ "taxi_cvpi": {
+  "yaw": 180
+ },
+ "camry": {
+  "yaw": 180
+ },
+ "ped_umbrella": {
+  "height": 2.02
+ },
+ "car_sedan": {
+  "yaw": 180
+ },
+ "car_hatch": {
+  "yaw": 180
+ },
+ "car_wagon": {
+  "yaw": 180
+ },
+ "car_suv": {
+  "yaw": 180
+ },
+ "car_minivan": {
+  "yaw": 180
+ },
+ "car_pickup": {
+  "yaw": 180
+ }
+}
