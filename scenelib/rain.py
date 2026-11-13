@@ -54,11 +54,12 @@ def streak_material():
     l.new(sn.outputs[0], a.inputs[0])
     mx = n.new('ShaderNodeMixShader')
     # distance falloff: drops further away are smaller on screen, lit less directly and seen
-    # through more haze -> fainter. Opacity x1.0 within 4 m, x0.3 by 35 m (camera distance).
+    # through more haze -> much fainter. Opacity x1.0 within 4 m, x0.08 by 25 m (camera distance);
+    # with x0.3 at 35 m the 4K crop showed distant streaks as bright 'snow' against dark walls.
     cd_ = n.new('ShaderNodeCameraData')
-    fall = n.new('ShaderNodeMapRange')
-    fall.inputs['From Min'].default_value = 4.0; fall.inputs['From Max'].default_value = 35.0
-    fall.inputs['To Min'].default_value = 1.0; fall.inputs['To Max'].default_value = 0.3
+    fall = n.new('ShaderNodeMapRange'); fall.interpolation_type = 'SMOOTHSTEP'
+    fall.inputs['From Min'].default_value = 4.0; fall.inputs['From Max'].default_value = 25.0
+    fall.inputs['To Min'].default_value = 1.0; fall.inputs['To Max'].default_value = 0.08
     l.new(cd_.outputs['View Distance'], fall.inputs['Value'])
     af = n.new('ShaderNodeMath'); af.operation = 'MULTIPLY'
     l.new(a.outputs[0], af.inputs[0]); l.new(fall.outputs['Result'], af.inputs[1])
@@ -504,7 +505,7 @@ def build(root, cam, vehicles, road_mat, awning_edges):
     proto = streak_proto(col, sm)
     # near box: dense, where streaks are resolved; far box: sparse (haze takes over beyond)
     rain_streaks(col, cam, proto, (-7.0, -28.0, 0.0), (13.0, -6.0, 9.0), 15500, 11, 'RainNear')
-    rain_streaks(col, cam, proto, (-12.0, -6.0, 0.0), (14.0, 40.0, 16.0), 12500, 23, 'RainFar')
+    rain_streaks(col, cam, proto, (-12.0, -6.0, 0.0), (14.0, 40.0, 16.0), 8000, 23, 'RainFar')
     awning_drips(col, cam, streak_proto(col, sm, name='DripProto'), awning_edges, random.Random(C.SEED + 9))
     water_surface_animation(road_mat)
     if bpy.data.materials.get('Asphalt_patch'):
