@@ -29,9 +29,9 @@ import bpy
 
 QUALITY = {
     #            samples  noise-thr  max  diff gloss trans  clamp-ind  caustics
-    'final':    (512,     0.010,     8,   3,   4,    8,     6.0,       False),
-    'balanced': (320,     0.015,     8,   3,   4,    8,     5.0,       False),
-    'fast':     (192,     0.025,     6,   2,   3,    6,     4.0,       False),
+    'final':    (512,     0.010,     8,   3,   4,    8,     3.0,       False),
+    'balanced': (320,     0.015,     8,   3,   4,    8,     3.0,       False),
+    'fast':     (192,     0.025,     6,   2,   3,    6,     3.0,       False),
     'draft':    (64,      0.050,     4,   2,   2,    4,     3.0,       False),
 }
 
@@ -110,6 +110,8 @@ def apply_quality(a):
     cy.denoiser = 'OPENIMAGEDENOISE'
     cy.denoising_input_passes = 'RGB_ALBEDO_NORMAL'
     cy.denoising_prefilter = 'ACCURATE'
+    if hasattr(cy, 'denoising_quality'):
+        cy.denoising_quality = 'HIGH'
     if hasattr(cy, 'denoising_use_gpu'):
         cy.denoising_use_gpu = True
     cy.use_light_tree = True
@@ -124,6 +126,14 @@ def apply_quality(a):
     r.image_settings.color_mode = 'RGB'
     r.image_settings.color_depth = '8' if a.png8 else '16'
     r.image_settings.compression = 15
+    # glare halo size is in pixels (octaves): keep it the same fraction of the frame at any
+    # resolution (looks were set at 960 px wide with size 5)
+    if sc.use_nodes and sc.node_tree:
+        import math
+        g = sc.node_tree.nodes.get('GLARE')
+        if g is not None:
+            w = r.resolution_x * r.resolution_percentage / 100
+            g.size = max(5, min(9, 5 + round(math.log2(w / 960))))
     r.use_file_extension = True
     return q
 

@@ -324,7 +324,12 @@ def vehicle_light_materials():
         mixc.inputs['A'].default_value = (1.0, 0.0, 0.0, 1)   # sRGB gamut edge; real lamps are even more saturated
         mixc.inputs['B'].default_value = (*M.blackbody_rgb(5000), 1)
         l.new(mixc.outputs['Result'], b.inputs['Emission Color'])
-        l.new(tot.outputs[0], b.inputs['Emission Strength'])
+        # camera rays only: what the road/glass reflect is the matching small light added in
+        # lamp_lights() (directly sampled -> clean reflections instead of speckle)
+        lp = n.new('ShaderNodeLightPath')
+        cam_only = n.new('ShaderNodeMath'); cam_only.operation = 'MULTIPLY'
+        l.new(tot.outputs[0], cam_only.inputs[0]); l.new(lp.outputs['Is Camera Ray'], cam_only.inputs[1])
+        l.new(cam_only.outputs[0], b.inputs['Emission Strength'])
 
 
 def taxi_roof_sign():
@@ -378,6 +383,78 @@ VEHICLE_LAMPS = {
 }
 
 
+def _lamp_centroids(body, rear=True):
+    """Find red-lens lamp areas on a vehicle body by sampling each lamp material's texture at
+    polygon UV centres. Returns {'L': (centroid, area), 'R': ...} in body-local space."""
+    import numpy as np
+    me = body.data
+    uvl = me.uv_layers.active
+    if uvl is None:
+        return {}
+    cache = {}
+    def tex_of(m):
+        if m is None or not m.use_nodes:
+            return None
+        b = m.node_tree.nodes.get('Principled BSDF')
+        lk = next((x for x in m.node_tree.links if x.to_node == b and x.to_socket.name == 'Base Color'
+                   and x.from_node.type == 'TEX_IMAGE'), None)
+        if lk is None:
+            return None
+        im = lk.from_node.image
+        if im.name not in cache:
+            w, h = im.size
+            cache[im.name] = np.array(im.pixels[:], dtype=np.float32).reshape(h, w, 4)
+        return cache[im.name]
+    lamp_mats = {i for i, m in enumerate(me.materials) if m and (m.name.startswith('Optics_') or
+                 m.name in ('main_frame', 'wheels_and_parts', 'glass', 'Index_0_2_SS', 'Index_0_2', 'Index_0_1'))}
+    acc = {'L': [Vector(), 0.0], 'R': [Vector(), 0.0]}
+    for p in me.polygons:
+        if p.material_index not in lamp_mats:
+            continue
+        c = p.center
+        if (c.y > -1.2) if rear else (c.y < 1.2):
+            continue
+        if c.z < 0.45:
+            continue
+        px = tex_of(me.materials[p.material_index])
+        if px is None:
+            continue
+        uv = sum((uvl.data[li].uv for li in p.loop_indices), Vector((0, 0))) / p.loop_total
+        h_, w_ = px.shape[:2]
+        r, g, b_, _ = px[int((uv.y % 1) * (h_ - 1)), int((uv.x % 1) * (w_ - 1))]
+        mx, mn = max(r, g, b_), min(r, g, b_)
+        if mx > 0.05 and r == mx and (mx - mn) / mx > 0.6 and max(g, b_) < 0.35 * r:
+            side = 'L' if c.x < 0 else 'R'
+            acc[side][0] += c * p.area
+            acc[side][1] += p.area
+    return {k: (v[0] / v[1], v[1]) for k, v in acc.items() if v[1] > 1e-5}
+
+
+def lamp_lights(col, name, v, brake=True):
+    """Small rear-facing red spot lights at the lamp centroids: brake ~100 cd + tail ~8 cd
+    (SAE J586/J585), 160 deg cone. Invisible to the camera (the lens mesh is seen instead)."""
+    found = _lamp_centroids(v['body'])
+    out = []
+    for side, (c, area) in found.items():
+        cd = (100.0 if brake else 0.0) + 8.0
+        cone = 160.0
+        omega = 2 * math.pi * (1 - math.cos(math.radians(cone / 2)))
+        ld = bpy.data.lights.new(f'{name}_lamp_{side}', 'SPOT')
+        ld.energy = spot_watts(cd * omega, cone)
+        ld.color = (1.0, 0.02, 0.0)
+        ld.spot_size = math.radians(cone); ld.spot_blend = 0.5
+        ld.shadow_soft_size = min(0.06, max(0.02, math.sqrt(area) / 2))
+        o = bpy.data.objects.new(f'{name}_lamp_{side}', ld)
+        col.objects.link(o)
+        o.parent = v['root']
+        o.location = c + Vector((0, -0.04, 0))
+        o.rotation_euler = (math.radians(-90), 0, 0)     # -Z (spot axis) -> -Y (rearwards)
+        o.visible_camera = False
+        out.append(o)
+    print(f'[lighting] {name}: lamp lights {sorted(found)}')
+    return out
+
+
 def vehicles(root, vehicles, sizes):
     """Lights on for the moving/stopped traffic. Stopped at a red light: brake held on."""
     col = collection('VehicleLights', root)
@@ -394,6 +471,8 @@ def vehicles(root, vehicles, sizes):
             o['brake'] = 1.0
         L = sizes[key][1]
         hx, hy, hz = VEHICLE_LAMPS[key]
+        if not name.startswith('sb'):
+            v['lamps'] = lamp_lights(col, name, v)
         v['beams'] = [headlight_beam(col, f'{name}_beam_{s}', root_o, (s * hx, L / 2 - hy, hz))
                       for s in (-1, 1)]
 

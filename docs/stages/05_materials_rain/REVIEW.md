@@ -59,3 +59,46 @@ rivulets on all vehicle glass and beads on the clear coats; tandem wipers on the
 | RS-1 | Rain too dense and uniformly visible, including in front of dark facades: reads as a heavy downpour overlay, not light rain catching the lamps | streaks halved (22 k near, 18 k far); translucent albedo 0.85 → 0.35; opacity 0.45 → 0.3 (glossy glints kept) |
 | RS-3 | Wipers invisible behind oncoming headlight glare at 25 m | none needed: correct for that distance; they exist and run on the clock |
 | RS-4 | Puddle ripples faint at test resolution | judge at 128 spp |
+
+## High-sample denoise test (note 8): 1920×1080, 128 spp, final denoise settings
+Rendered with `render.py --quality final --samples 128 --scale 50 --frame 1` (OIDN, prefilter
+Accurate, albedo + normal guides, adaptive threshold 0.01). `tools/denoise_prep.py` also saves the
+raw (noisy) and denoised beauty passes as EXR before compositing, and `tools/noise_report.py`
+measures the residual (noisy − denoised) luminance per region. CPU time: ~18–19 min per frame.
+
+| Region | Test 1: mean / residual rms / fireflies | Test 2 (clamp 3, rain hidden from glossy, OIDN High) | Test 3 (+ camera-only lamp emitters with matching small lights) |
+|---|---|---|---|
+| wet road, tail-lamp reflections | 0.0120 / 0.0421 / 3.0 % | 0.0118 / 0.0420 / 3.0 % | 0.0017 / **0.0030** / 1.6 % |
+| kerb / gutter | 0.0168 / 0.0154 / 1.4 % | 0.0168 / 0.0154 / 1.4 % | 0.0160 / 0.0153 / 1.6 % |
+| dark facade | 0.00054 / 0.00080 / 3.1 % | same | 0.00053 / 0.00057 / 3.1 % |
+| sidewalk | 0.00071 / 0.00155 / 1.1 % | 0.00070 / 0.00140 / 1.1 % | 0.00057 / 0.00096 / 0.9 % |
+
+Findings:
+* **Test 1 failed the hard case.** The raw road was a mass of speckle (residual ~3.5× the
+  signal). After denoising, the reflections became soft, blotchy "watercolour" shapes, with a
+  broad white smear under both cars (`denoise_test1_road_noisy_denoised_final.png`). That kind of
+  reconstruction shimmers from frame to frame.
+* **Test 2 changed nothing.** The noise was not indirect fireflies or the rain.
+* **Cause:** direct reflections, in near-mirror water, of *small textured mesh emitters*: the
+  brake/tail-lamp hotspot textures, the signal lenses, and the oncoming headlamp glass.
+  Cycles samples these poorly.
+* **Fix (test 3):** those emitters are now visible to camera rays only. Each gets a matching small
+  analytic light that Cycles samples directly: brake/tail ~108 cd red spots placed at the lamp
+  centroids (found by sampling the lamp textures through the UVs); signal lenses ~600 cd spots
+  keyed on the same timeline; headlamps via the existing beam spots. Road residual noise fell 14×
+  and fireflies halved. The reflections are now compact red streaks; the smear is gone
+  (`denoise_test1_vs_test3_road_crops.png`).
+* **No real banding.** The stepped rings seen around lamps in previews are a viewer quantisation
+  artefact; the 16-bit frame's halo profile is smooth (252 levels).
+* **Kerb streak (note 2):** at 128 spp it reads as tail-lamp light reflected in broken gutter
+  water, not a glowing wall. The gutter water is now rougher (0.02–0.08) and patchier.
+* **Remaining risk:** ~1.6 % fireflies on the road before denoising. At 4K, 512 adaptive samples
+  roughly halve the per-pixel noise again. Temporal stability of the denoised reflections must be
+  checked on the 24-frame clip (traffic stage), by diffing consecutive frames.
+* The glare halo size is now resolution-aware (`render.py` sets it from the output width) and
+  one step smaller.
+
+## Round MR3: `MR3_*.png`
+Rain visibility restored to "light rain" (translucent 0.6, opacity 0.4, 40 k streaks): visible
+where it catches the lamps and faintly against dark facades. Awning drips under the right-hand
+awning. Puddle ripples are subtle in stills (`MR3_ripples_closeup.png`); judge them in motion.

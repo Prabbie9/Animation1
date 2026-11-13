@@ -35,9 +35,38 @@ def lens_material(approach, colour):
     b.inputs['Coat Weight'].default_value = 1.0
     b.inputs['Emission Color'].default_value = (*c, 1)
     b.inputs['Emission Strength'].default_value = 0.0
+    # camera rays only: the matching small spot light (lens_light) lights the wet road
+    lp = nt.nodes.new('ShaderNodeLightPath')
+    val = nt.nodes.new('ShaderNodeValue'); val.name = 'LENS_STRENGTH'
+    mul = nt.nodes.new('ShaderNodeMath'); mul.operation = 'MULTIPLY'
+    nt.links.new(val.outputs[0], mul.inputs[0]); nt.links.new(lp.outputs['Is Camera Ray'], mul.inputs[1])
+    nt.links.new(mul.outputs[0], b.inputs['Emission Strength'])
     m['approach'] = approach
     m['colour'] = colour
     return m
+
+
+LENS_CD = 600.0      # LED 300 mm signal, on-axis luminous intensity (ITE VTCSH: 365-895 cd)
+
+
+def lens_light(name, col, approach, colour, loc):
+    """Small forward spot (60 deg) in front of a lens, so the road reflection is a clean,
+    directly sampled light. Its power is keyed together with the lens emission."""
+    cone = 60.0
+    omega = 2 * math.pi * (1 - math.cos(math.radians(cone / 2)))
+    ld = bpy.data.lights.new(name, 'SPOT')
+    ld.spot_size = math.radians(cone); ld.spot_blend = 0.6
+    ld.shadow_soft_size = 0.12
+    ld.color = COLOURS[colour]
+    ld['full_energy'] = LENS_CD * omega / 683.0 * 4 * math.pi / omega
+    ld['approach'] = approach; ld['colour'] = colour
+    ld.energy = 0.0
+    o = bpy.data.objects.new(name, ld)
+    col.objects.link(o)
+    o.location = loc
+    o.rotation_euler = (math.radians(-90), 0, 0)     # spot axis -Z -> -Y (out of the lens)
+    o.visible_camera = False
+    return o
 
 
 def build_head(name, col, approach, loc, housing_mat, backplate_mat):
@@ -56,6 +85,7 @@ def build_head(name, col, approach, loc, housing_mat, backplate_mat):
         lens = cylinder(name + f'_lens_{colour}', col, 0.15, 0.02, (0, -D / 2, z),
                         lens_material(approach, colour), 24, rot=(math.pi / 2, 0, 0))
         parts.append(lens)
+        parts.append(lens_light(name + f'_light_{colour}', col, approach, colour, (0, -D / 2 - 0.03, z)))
         # tunnel visor: open tube, top 3/4, protruding 0.24 m
         bm = bmesh.new()
         segs = 18
@@ -93,8 +123,10 @@ def set_state(approach, lit):
     for colour in COLOURS:
         m = bpy.data.materials.get(f'SigLens_{approach}_{colour}')
         if m:
-            m.node_tree.nodes['Principled BSDF'].inputs['Emission Strength'].default_value = \
-                _strength(colour, lit)
+            m.node_tree.nodes['LENS_STRENGTH'].outputs[0].default_value = _strength(colour, lit)
+        for ld in bpy.data.lights:
+            if ld.get('approach') == approach and ld.get('colour') == colour:
+                ld.energy = ld['full_energy'] if colour == lit else 0.0
 
 
 def animate_cycle():
@@ -112,13 +144,21 @@ def animate_cycle():
             m = bpy.data.materials.get(f'SigLens_{ap}_{colour}')
             if not m:
                 continue
-            sock = m.node_tree.nodes['Principled BSDF'].inputs['Emission Strength']
+            sock = m.node_tree.nodes['LENS_STRENGTH'].outputs[0]
             for f, lit in steps:
                 sock.default_value = _strength(colour, lit)
                 sock.keyframe_insert('default_value', frame=f)
             for fc in m.node_tree.animation_data.action.fcurves:
                 for kp in fc.keyframe_points:
                     kp.interpolation = 'CONSTANT'
+            for ld in bpy.data.lights:
+                if ld.get('approach') == ap and ld.get('colour') == colour:
+                    for f, lit in steps:
+                        ld.energy = ld['full_energy'] if colour == lit else 0.0
+                        ld.keyframe_insert('energy', frame=f)
+                    for fc in ld.animation_data.action.fcurves:
+                        for kp in fc.keyframe_points:
+                            kp.interpolation = 'CONSTANT'
 
 
 def state_at(approach, frame):

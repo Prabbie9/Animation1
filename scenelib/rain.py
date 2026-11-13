@@ -40,7 +40,7 @@ def streak_material():
     m, n, l = M.new('RainStreak')
     out = n['Material Output']
     n.remove(n['Principled BSDF'])
-    tr = n.new('ShaderNodeBsdfTranslucent'); tr.inputs['Color'].default_value = (0.35, 0.37, 0.38, 1)
+    tr = n.new('ShaderNodeBsdfTranslucent'); tr.inputs['Color'].default_value = (0.6, 0.62, 0.64, 1)
     gl = n.new('ShaderNodeBsdfGlossy'); gl.inputs['Roughness'].default_value = 0.08
     ad = n.new('ShaderNodeAddShader'); l.new(tr.outputs[0], ad.inputs[0]); l.new(gl.outputs[0], ad.inputs[1])
     tp = n.new('ShaderNodeBsdfTransparent')
@@ -50,7 +50,7 @@ def streak_material():
     pi = n.new('ShaderNodeMath'); pi.operation = 'MULTIPLY'; pi.inputs[1].default_value = math.pi
     l.new(sep.outputs['Y'], pi.inputs[0])
     sn = n.new('ShaderNodeMath'); sn.operation = 'SINE'; l.new(pi.outputs[0], sn.inputs[0])
-    a = n.new('ShaderNodeMath'); a.operation = 'MULTIPLY'; a.inputs[1].default_value = 0.3
+    a = n.new('ShaderNodeMath'); a.operation = 'MULTIPLY'; a.inputs[1].default_value = 0.4
     l.new(sn.outputs[0], a.inputs[0])
     mx = n.new('ShaderNodeMixShader')
     l.new(a.outputs[0], mx.inputs['Fac']); l.new(tp.outputs[0], mx.inputs[1]); l.new(ad.outputs[0], mx.inputs[2])
@@ -138,7 +138,11 @@ def rain_streaks(col, cam, proto, box_min, box_max, count, seed, name):
     ob = bpy.data.objects.new(name, holder)
     col.objects.link(ob)
     mod = ob.modifiers.new('Rain', 'NODES'); mod.node_group = g
+    # camera (and transmission) only: drops reflected in the road are invisible in reality and
+    # tens of thousands of thin transparent quads in every glossy path add a lot of noise
     ob.visible_shadow = False
+    ob.visible_glossy = False
+    ob.visible_diffuse = False
     return ob
 
 
@@ -208,6 +212,8 @@ def awning_drips(col, cam, proto, edges, rng):
     col.objects.link(ob)
     mod = ob.modifiers.new('Drips', 'NODES'); mod.node_group = g
     ob.visible_shadow = False
+    ob.visible_glossy = False
+    ob.visible_diffuse = False
     return ob
 
 

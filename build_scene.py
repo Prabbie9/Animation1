@@ -69,9 +69,9 @@ def night(sc, root, vehicles):
     materials.set_wetness(1.0)
     lighting.colour_management(sc, exposure=C.EXPOSURE_EV)
     lighting.haze_compositor(sc)
-    lighting.glare(sc, threshold=6.0, mix=-0.9, size=7)
+    lighting.glare(sc, threshold=6.0, mix=-0.92, size=5)
     cy = sc.cycles
-    cy.sample_clamp_indirect = 6.0
+    cy.sample_clamp_indirect = 3.0
     cy.blur_glossy = 1.0
     cy.max_bounces, cy.diffuse_bounces, cy.glossy_bounces, cy.transmission_bounces = 8, 3, 4, 8
     cy.use_light_tree = True

@@ -84,9 +84,11 @@ More levers, from the most effective:
 2. `--quality balanced`.
 3. `--samples N` to override the sample cap for any quality level.
 
-Adaptive sampling stops early in clean areas, and OpenImageDenoise (on the GPU) runs on every
-frame using albedo and normal passes. Indirect light is clamped (6.0) and glossy filtering is
-on, both to suppress fireflies on the wet asphalt.
+Adaptive sampling stops early in clean areas, and OpenImageDenoise (High quality, on the GPU)
+runs on every frame using albedo and normal passes. Indirect light is clamped (3.0) and glossy
+filtering is on. Small emitters (lamp lenses, signals, brake lamps) are visible to the camera
+only, with matching small lights doing the lighting and the reflections. This cut the
+noise in the wet-road reflections 14× (see `docs/stages/05_materials_rain/REVIEW.md`).
 
 Target: ≤ 2 min/frame at 4K on the 7800 XT (≈ 6.5 h for 192 frames). The estimate for this
 scene is in `REPORT.md`, together with how it was derived.
