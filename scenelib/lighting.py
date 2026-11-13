@@ -39,9 +39,17 @@ def spot_watts(lumens, cone_deg):
 
 
 # ---------------------------------------------------------------------------------- world
+SKY_ZENITH_NITS = 0.08     # overhead: cool grey cloud base, weakly lit
+SKY_HORIZON_NITS = 0.22    # towards the horizon: cloud underside lit by the city (sky glow)
+SKY_ZENITH_RGB = (0.78, 0.84, 0.95)
+SKY_HORIZON_RGB = (1.0, 0.86, 0.72)
+
+
 def world(sc):
-    """Overcast night sky lit from below by the city: HDRI clouds, normalised so the zenith
-    luminance is ~0.15 cd/m2, tinted towards the orange-grey of sodium/LED sky glow."""
+    """Overcast night sky lit from below by the city. Colour and level come from a physical-ish
+    gradient: brighter and warmer near the horizon (where the cloud base sees more of the lit
+    city), cooler and darker overhead. The HDRI only contributes cloud *texture* (desaturated,
+    clamped, normalised to mean 1) so its own colour/lamps don't leak in."""
     w = bpy.data.worlds.new('NightSky')
     w.use_nodes = True
     n, l = w.node_tree.nodes, w.node_tree.links
@@ -50,27 +58,32 @@ def world(sc):
     path = os.path.join(ROOT, 'assets', 'polyhaven', 'hdri', 'kloppenheim_04_2k.exr')
     env.image = bpy.data.images.load(path, check_existing=True)
     tc = n.new('ShaderNodeTexCoord'); mp = n.new('ShaderNodeMapping')
-    mp.inputs['Rotation'].default_value = (0, 0, math.radians(74.5))  # town glow due north, down the avenue
+    mp.inputs['Rotation'].default_value = (0, 0, math.radians(74.5))
     l.new(tc.outputs['Generated'], mp.inputs['Vector']); l.new(mp.outputs['Vector'], env.inputs['Vector'])
-    # desaturate a bit and tint (sky glow is mostly reflected street lighting)
-    # clamp: the HDRI contains a distant lamp (~350x the sky) that would act as a stray light
-    clampc = n.new('ShaderNodeMix'); clampc.data_type = 'RGBA'; clampc.blend_type = 'DARKEN'
-    clampc.inputs['Factor'].default_value = 1.0; clampc.inputs['B'].default_value = (1.2, 1.2, 1.2, 1)
-    l.new(env.outputs['Color'], clampc.inputs['A'])
-    hsv = n.new('ShaderNodeHueSaturation'); hsv.inputs['Saturation'].default_value = 0.6
-    l.new(clampc.outputs['Result'], hsv.inputs['Color'])
-    tint = n.new('ShaderNodeMix'); tint.data_type = 'RGBA'; tint.blend_type = 'MULTIPLY'
-    tint.inputs['Factor'].default_value = 1.0
-    tint.inputs['B'].default_value = (1.0, 0.72, 0.5, 1)
-    l.new(hsv.outputs['Color'], tint.inputs['A'])
-    l.new(tint.outputs['Result'], bg.inputs['Color'])
-    st = n.new('ShaderNodeValue'); st.name = 'SKY_STRENGTH'
-    # the HDRI's sky is ~0.5 (linear) around the horizon glow; scale to ~0.15 cd/m2
-    st.outputs[0].default_value = nits(0.15) / 0.2      # HDRI median sky ~0.2
+    bw = n.new('ShaderNodeRGBToBW'); l.new(env.outputs['Color'], bw.inputs['Color'])
+    # cloud texture: HDRI luminance / its median (~0.2), clamped to 0.6..1.6
+    tex = n.new('ShaderNodeMapRange')
+    tex.inputs['From Min'].default_value = 0.0; tex.inputs['From Max'].default_value = 0.4
+    tex.inputs['To Min'].default_value = 0.6; tex.inputs['To Max'].default_value = 1.6
+    l.new(bw.outputs['Val'], tex.inputs['Value'])
+    # elevation gradient (direction z: 0 at horizon, 1 at zenith)
+    sep = n.new('ShaderNodeSeparateXYZ'); l.new(tc.outputs['Generated'], sep.inputs['Vector'])
+    el = n.new('ShaderNodeMapRange')
+    el.inputs['From Min'].default_value = 0.0; el.inputs['From Max'].default_value = 0.55
+    el.interpolation_type = 'SMOOTHSTEP'
+    l.new(sep.outputs['Z'], el.inputs['Value'])
+    hz = [c * nits(SKY_HORIZON_NITS) for c in SKY_HORIZON_RGB]
+    zn = [c * nits(SKY_ZENITH_NITS) for c in SKY_ZENITH_RGB]
+    grad = n.new('ShaderNodeMix'); grad.data_type = 'RGBA'
+    l.new(el.outputs['Result'], grad.inputs['Factor'])
+    grad.inputs['A'].default_value = (*hz, 1); grad.inputs['B'].default_value = (*zn, 1)
+    mul = n.new('ShaderNodeMix'); mul.data_type = 'RGBA'; mul.blend_type = 'MULTIPLY'
+    mul.inputs['Factor'].default_value = 1.0
+    l.new(grad.outputs['Result'], mul.inputs['A']); l.new(tex.outputs['Result'], mul.inputs['B'])
+    l.new(mul.outputs['Result'], bg.inputs['Color'])
+    st = n.new('ShaderNodeValue'); st.name = 'SKY_STRENGTH'; st.outputs[0].default_value = 1.0
     l.new(st.outputs[0], bg.inputs['Strength'])
     sc.world = w
-    # sky is seen directly and in reflections; it must not dominate the lighting of the street
-    w.cycles_visibility.diffuse = True
     return w
 
 
@@ -260,10 +273,25 @@ def vehicle_light_materials():
             a = n.new('ShaderNodeAttribute'); a.attribute_type = 'INSTANCER'; a.attribute_name = name
             return a.outputs['Fac']
         # tail: 0.45 + brake 4.0 (relative), times rear & red mask
+        # Physical lamp luminance (SAE J586/J585: brake 80-185 cd, tail 2-18 cd from a ~0.03 m2
+        # lens -> peak ~4000 cd/m2 brake, ~250 cd/m2 tail). The light is concentrated in hotspots
+        # behind the diffuser (bulb/LED cores), so the emissive area follows the lens texture's
+        # brightness instead of filling the whole red region uniformly.
+        bn = n.new('ShaderNodeValue'); bn.name = 'BRAKE_NITS'; bn.outputs[0].default_value = nits(4000)
+        tn = n.new('ShaderNodeValue'); tn.name = 'TAIL_NITS'; tn.outputs[0].default_value = nits(250)
         tb = n.new('ShaderNodeMath'); tb.operation = 'MULTIPLY_ADD'
-        l.new(attr('brake'), tb.inputs[0]); tb.inputs[1].default_value = nits(140)   # see REPORT: below physical (~1000) so AgX keeps it red
-        tl = n.new('ShaderNodeMath'); tl.operation = 'MULTIPLY'; tl.inputs[1].default_value = nits(35)
-        l.new(attr('tail'), tl.inputs[0]); l.new(tl.outputs[0], tb.inputs[2])
+        l.new(attr('brake'), tb.inputs[0]); l.new(bn.outputs[0], tb.inputs[1])
+        tl = n.new('ShaderNodeMath'); tl.operation = 'MULTIPLY'
+        l.new(attr('tail'), tl.inputs[0]); l.new(tn.outputs[0], tl.inputs[1])
+        l.new(tl.outputs[0], tb.inputs[2])
+        hot = n.new('ShaderNodeMapRange'); hot.name = 'LAMP_HOTSPOT'
+        hot.inputs['From Min'].default_value = 0.05; hot.inputs['From Max'].default_value = 0.35
+        hot.inputs['To Min'].default_value = 0.0; hot.inputs['To Max'].default_value = 1.0
+        hot.interpolation_type = 'SMOOTHERSTEP'
+        l.new(hsv.outputs[2], hot.inputs['Value'])
+        tbh = n.new('ShaderNodeMath'); tbh.operation = 'MULTIPLY'
+        l.new(tb.outputs[0], tbh.inputs[0]); l.new(hot.outputs['Result'], tbh.inputs[1])
+        tb = tbh
         rm = n.new('ShaderNodeMath'); rm.operation = 'MULTIPLY'
         l.new(red.outputs[0], rm.inputs[0]); l.new(rear.outputs[0], rm.inputs[1])
         rm2 = n.new('ShaderNodeMath'); rm2.operation = 'MULTIPLY'
@@ -293,7 +321,7 @@ def vehicle_light_materials():
         l.new(rstr.outputs[0], tot.inputs[0]); l.new(hstr.outputs[0], tot.inputs[1])
         mixc = n.new('ShaderNodeMix'); mixc.data_type = 'RGBA'
         l.new(front.outputs[0], mixc.inputs['Factor'])
-        mixc.inputs['A'].default_value = (1.0, 0.0, 0.0, 1)
+        mixc.inputs['A'].default_value = (1.0, 0.0, 0.0, 1)   # sRGB gamut edge; real lamps are even more saturated
         mixc.inputs['B'].default_value = (*M.blackbody_rgb(5000), 1)
         l.new(mixc.outputs['Result'], b.inputs['Emission Color'])
         l.new(tot.outputs[0], b.inputs['Emission Strength'])
@@ -464,9 +492,28 @@ def haze_compositor(sc):
     mix = t.nodes.new('CompositorNodeMixRGB'); mix.blend_type = 'MIX'
     t.links.new(mul.outputs[0], mix.inputs['Fac'])
     t.links.new(rl.outputs['Image'], mix.inputs[1])
-    haze = M.blackbody_rgb(2600)
-    k = nits(0.35)                               # scattered lamp/sky light, scene-linear
+    haze = SKY_HORIZON_RGB                       # same light as the horizon sky glow
+    k = nits(0.3)                                # scattered lamp/sky light, scene-linear
     mix.inputs[2].default_value = (haze[0] * k, haze[1] * k, haze[2] * k, 1)
     mix.name = 'HAZE'
     t.links.new(mix.outputs[0], comp.inputs['Image'])
     return t
+
+
+def glare(sc, threshold=1.0, mix=-0.75, size=8):
+    """Lens bloom (compositor Glare/Fog Glow) applied after the haze: only values above
+    ~threshold (scene-linear, after exposure scaling in the view transform) bloom, so lamps,
+    signals and brake lamps get a soft halo of their own colour."""
+    t = sc.node_tree
+    comp = next(n for n in t.nodes if n.type == 'COMPOSITE')
+    src = comp.inputs['Image'].links[0].from_socket
+    g = t.nodes.new('CompositorNodeGlare'); g.name = 'GLARE'
+    g.glare_type = 'FOG_GLOW'
+    g.quality = 'HIGH'
+    g.size = size
+    g.mix = mix
+    # threshold is in scene-linear units *before* the view exposure, so convert
+    g.threshold = threshold / (2 ** sc.view_settings.exposure)
+    t.links.new(src, g.inputs['Image'])
+    t.links.new(g.outputs['Image'], comp.inputs['Image'])
+    return g

@@ -236,3 +236,44 @@ def blackbody_rgb(kelvin):
         b = 255
     c = [min(max(v, 0), 255) / 255 for v in (r, g, b)]
     return tuple(((x + 0.055) / 1.055) ** 2.4 if x > 0.04045 else x / 12.92 for x in c)
+
+
+def weather_facade(m, streak_amt=0.35, base_amt=0.3):
+    """Facade weathering on top of an existing wet-layer material (object/world space, m):
+      * rain-runoff streaks: vertical, stretched noise (dirt washed down from sills/cornices)
+      * splash zone: lowest ~0.6 m darker and wetter (rain splash-back, de-icing salt, grime)
+      * slight soot darkening towards the top (traffic pollution deposits on ledges)"""
+    n, l = m.node_tree.nodes, m.node_tree.links
+    grp = next(x for x in n if x.type == 'GROUP' and x.node_tree.name == 'Wetness')
+    col_in = grp.inputs['Color'].links[0].from_socket
+    tc = n.new('ShaderNodeTexCoord')
+    vm = n.new('ShaderNodeVectorMath'); vm.operation = 'MULTIPLY'
+    vm.inputs[1].default_value = (7.0, 7.0, 0.18)                 # vertical streaks
+    l.new(tc.outputs['Object'], vm.inputs[0])
+    nz = n.new('ShaderNodeTexNoise'); nz.inputs['Scale'].default_value = 1.0
+    nz.inputs['Detail'].default_value = 3.0
+    l.new(vm.outputs[0], nz.inputs['Vector'])
+    st = n.new('ShaderNodeMapRange')
+    st.inputs['From Min'].default_value = 0.5; st.inputs['From Max'].default_value = 0.7
+    st.inputs['To Min'].default_value = 0.0; st.inputs['To Max'].default_value = streak_amt
+    l.new(nz.outputs['Fac'], st.inputs['Value'])
+    sep = n.new('ShaderNodeSeparateXYZ'); l.new(tc.outputs['Object'], sep.inputs['Vector'])
+    base = n.new('ShaderNodeMapRange')
+    base.inputs['From Min'].default_value = 0.2; base.inputs['From Max'].default_value = 0.8
+    base.inputs['To Min'].default_value = base_amt; base.inputs['To Max'].default_value = 0.0
+    l.new(sep.outputs['Z'], base.inputs['Value'])
+    tot = n.new('ShaderNodeMath'); tot.operation = 'ADD'; tot.use_clamp = True
+    l.new(st.outputs['Result'], tot.inputs[0]); l.new(base.outputs['Result'], tot.inputs[1])
+    mix = n.new('ShaderNodeMix'); mix.data_type = 'RGBA'; mix.blend_type = 'MULTIPLY'
+    l.new(tot.outputs[0], mix.inputs['Factor'])
+    l.new(col_in, mix.inputs['A']); mix.inputs['B'].default_value = (0.42, 0.38, 0.33, 1)
+    l.new(mix.outputs['Result'], grp.inputs['Color'])
+    # splash zone is wetter: lower roughness
+    r_in = grp.inputs['Roughness'].links[0].from_socket if grp.inputs['Roughness'].links else None
+    if r_in is not None:
+        rm = n.new('ShaderNodeMath'); rm.operation = 'MULTIPLY'
+        inv = n.new('ShaderNodeMath'); inv.operation = 'SUBTRACT'; inv.inputs[0].default_value = 1.0
+        l.new(base.outputs['Result'], inv.inputs[1])
+        l.new(r_in, rm.inputs[0]); l.new(inv.outputs[0], rm.inputs[1])
+        l.new(rm.outputs[0], grp.inputs['Roughness'])
+    return m

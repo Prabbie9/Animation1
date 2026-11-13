@@ -13,8 +13,8 @@ sys.path.insert(0, HERE)
 import importlib
 import scenelib
 from scenelib import (config as C, util, materials, signals, layout, assets, dressing, buildings,
-                      lighting, surfaces, vehicle_paint)
-for m in (C, util, materials, signals, layout, assets, dressing, buildings, lighting, surfaces, vehicle_paint):
+                      lighting, surfaces, vehicle_paint, rain)
+for m in (C, util, materials, signals, layout, assets, dressing, buildings, lighting, surfaces, vehicle_paint, rain):
     importlib.reload(m)
 
 
@@ -60,14 +60,16 @@ def night(sc, root, vehicles):
     lighting.world(sc)
     lighting.street_lights(root)
     lighting.skyline()
-    surfaces.apply(root)
+    road = surfaces.apply(root)
     vehicle_paint.apply()
     sizes = {k: assets.size(k) for k in lighting.VEHICLE_LAMPS}
     lighting.vehicles(root, vehicles, sizes)
     signals.animate_cycle()
+    rain.build(root, sc.camera, vehicles, road, buildings.AWNING_EDGES)
     materials.set_wetness(1.0)
     lighting.colour_management(sc, exposure=C.EXPOSURE_EV)
     lighting.haze_compositor(sc)
+    lighting.glare(sc, threshold=6.0, mix=-0.9, size=7)
     cy = sc.cycles
     cy.sample_clamp_indirect = 6.0
     cy.blur_glossy = 1.0

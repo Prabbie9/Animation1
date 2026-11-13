@@ -23,8 +23,9 @@ from .util import collection
 
 # material slot indices (same for every building mesh)
 WALL, TRIM, GLASS, FRAME, SHOPGLASS, SHOPFRAME, FASCIA, AWNING, SHUTTER, STEEL, ROOF, CORNICE, \
-    INTERIOR = range(13)
-N_SLOTS = 13
+    INTERIOR, INT_BAR, INT_LAUNDRY, INT_PIZZA = range(16)
+N_SLOTS = 16
+AWNING_EDGES = []      # (p0, p1) world points of awning front edges, used for rain drips
 
 SHOP_TYPES = [
     # name, open?, interior colour temperature (K), sign text options, sign colour, awning?
@@ -267,12 +268,14 @@ def shopfront(m, u0, u1, zb, h, shop, rng, sign_col, lights):
         proj = 1.25
         m.quad([(u0 + 0.05, 0.0, a0), (u1 - 0.05, 0.0, a0), (u1 - 0.05, proj, a1), (u0 + 0.05, proj, a1)], AWNING)
         m.quad([(u0 + 0.05, proj, a1), (u1 - 0.05, proj, a1), (u1 - 0.05, proj, a1 - 0.25), (u0 + 0.05, proj, a1 - 0.25)], AWNING)
+        AWNING_EDGES.append((tuple(m.P(u0 + 0.1, proj + 0.01, a1 - 0.25)), tuple(m.P(u1 - 0.1, proj + 0.01, a1 - 0.25))))
         for uu in (u0 + 0.05, u1 - 0.05):
             m.quad([(uu, 0.0, a0), (uu, proj, a1), (uu, proj, a1 - 0.25), (uu, 0.0, a1 - 0.25)], AWNING)
     # interior room (only when the shop is lit; dark shops show their reflective glass)
     if is_open or name == 'pharmacy':
         dpt = 4.5
-        m.box(u0 + 0.05, u1 - 0.05, -rec - dpt, -rec - 0.02, zb, tr1, INTERIOR, skip=('front',))
+        imat = {'bar': INT_BAR, 'laundromat': INT_LAUNDRY, 'pizza': INT_PIZZA}.get(name, INTERIOR)
+        m.box(u0 + 0.05, u1 - 0.05, -rec - dpt, -rec - 0.02, zb, tr1, imat, skip=('front',))
         lights.append(dict(kelvin=kelvin, open=is_open, centre=((u0 + u1) / 2, -rec - dpt / 2, tr1 - 0.05),
                            size=(W - 0.4, dpt - 0.6), frame=m))
     return sign
@@ -322,13 +325,15 @@ STYLES = {
 
 def make_materials():
     mats = {}
-    mats['brick_red'] = M.pbr('Wall_brick_red', 'brick_wall_02', 1.6, tint_var=0.12)
-    mats['brick_brown'] = M.pbr('Wall_brick_brown', 'brick_wall_10', 1.6, tint_var=0.12)
+    mats['brick_red'] = M.pbr('Wall_brick_red', 'brick_wall_02', 1.6, tint=(1.0, 0.93, 0.88), tint_var=0.2)
+    mats['brick_brown'] = M.pbr('Wall_brick_brown', 'brick_wall_10', 1.6, tint=(0.95, 0.95, 0.98), tint_var=0.2)
     mats['brick_patch'] = M.pbr('Wall_brick_patch', 'red_brick_plaster_patch_02', 2.2, tint_var=0.1)
     mats['stone_tile'] = M.pbr('Wall_stone_tile', 'concrete_tile_facade', 2.5, tint=(0.95, 0.92, 0.86), tint_var=0.1)
     mats['concrete_panel'] = M.pbr('Wall_concrete', 'brushed_concrete', 2.5, tint=(0.8, 0.8, 0.8), tint_var=0.15)
     mats['stucco_cream'] = M.simple('Wall_stucco_cream', (0.55, 0.48, 0.36), 0.8, rough_var=0.1, porosity=0.8)
     mats['stucco_grey'] = M.simple('Wall_stucco_grey', (0.35, 0.36, 0.36), 0.8, rough_var=0.1, porosity=0.8)
+    for k in ('brick_red', 'brick_brown', 'brick_patch', 'stone_tile', 'concrete_panel', 'stucco_cream', 'stucco_grey'):
+        M.weather_facade(mats[k], streak_amt=0.4 if k.startswith(('stone', 'concrete', 'stucco')) else 0.3)
     mats['trim'] = M.pbr('Trim_stone', 'brushed_concrete', 1.2, tint=(0.75, 0.72, 0.66), tint_var=0.08)
     mats['frame'] = M.simple('Window_frame', (0.05, 0.05, 0.05), 0.45, rough_var=0.1, porosity=0.0)
     mats['shopframe'] = M.simple('Shop_frame', (0.12, 0.12, 0.12), 0.35, metal=0.8, rough_var=0.15, porosity=0.0)
@@ -340,43 +345,121 @@ def make_materials():
     mats['cornice'] = M.simple('Cornice_paint', (0.32, 0.3, 0.27), 0.55, metal=0.3, rough_var=0.15, porosity=0.0)
     mats['window_glass'] = window_glass_material()
     mats['shop_glass'] = M.glass('Shop_glass', rough=0.03)
-    mats['interior'] = shop_interior_material()
+    mats['interior'] = shop_interior_material('shelves')
+    mats['int_bar'] = shop_interior_material('bar')
+    mats['int_laundry'] = shop_interior_material('laundry')
+    mats['int_pizza'] = shop_interior_material('pizza')
     return mats
 
 
-def shop_interior_material():
-    """Shop interiors seen through the glass: shelving bands of mixed products on the walls,
-    darker floor, ceiling a little brighter. Procedural (object-space), varied per object."""
-    m, n, l = M.new('Shop_interior')
+def shop_interior_material(kind):
+    """Shop interiors seen through the glass from 10-30 m. Object-space procedural patterns,
+    confined to a 'fixture zone' 0.15-2.1 m above the floor with plain painted wall above and
+    plain floor/ceiling (told apart by the normal):
+      shelves : deli / pharmacy gondola shelving, muted packaging colours
+      bar     : dark wood panelling, back-bar with a lit band of bottles at 1.1-1.7 m
+      laundry : row of white front-loaders (dark round doors) at 0.3-1.2 m, dryers stacked above
+      pizza   : white subway tile, stainless counter band, menu boards above"""
+    m, n, l = M.new(f'Shop_interior_{kind}')
     b = n['Principled BSDF']
-    b.inputs['Roughness'].default_value = 0.6
+    b.inputs['Roughness'].default_value = 0.5
     tc = n.new('ShaderNodeTexCoord')
     sep = n.new('ShaderNodeSeparateXYZ'); l.new(tc.outputs['Object'], sep.inputs['Vector'])
-    # shelf rows every 0.45 m in height
-    zs = n.new('ShaderNodeMath'); zs.operation = 'DIVIDE'; zs.inputs[1].default_value = 0.45
-    l.new(sep.outputs['Z'], zs.inputs[0])
-    zf = n.new('ShaderNodeMath'); zf.operation = 'FLOOR'; l.new(zs.outputs[0], zf.inputs[0])
-    # products: cells of 0.12-0.3 m along the wall, random colour per cell
-    xy = n.new('ShaderNodeMath'); xy.operation = 'ADD'
-    l.new(sep.outputs['X'], xy.inputs[0]); l.new(sep.outputs['Y'], xy.inputs[1])
-    xs = n.new('ShaderNodeMath'); xs.operation = 'DIVIDE'; xs.inputs[1].default_value = 0.17
-    l.new(xy.outputs[0], xs.inputs[0])
-    xf = n.new('ShaderNodeMath'); xf.operation = 'FLOOR'; l.new(xs.outputs[0], xf.inputs[0])
-    cv = n.new('ShaderNodeCombineXYZ'); l.new(xf.outputs[0], cv.inputs['X']); l.new(zf.outputs[0], cv.inputs['Y'])
-    oi = n.new('ShaderNodeObjectInfo'); l.new(oi.outputs['Random'], cv.inputs['Z'])
-    wn = n.new('ShaderNodeTexWhiteNoise'); wn.noise_dimensions = '3D'
-    l.new(cv.outputs['Vector'], wn.inputs['Vector'])
-    hsv = n.new('ShaderNodeHueSaturation')
-    hsv.inputs['Saturation'].default_value = 0.55; hsv.inputs['Value'].default_value = 0.45
-    l.new(wn.outputs['Color'], hsv.inputs['Color'])
-    # shelf edge (dark band at the bottom of each row) and floor/ceiling
-    zr = n.new('ShaderNodeMath'); zr.operation = 'FRACT'; l.new(zs.outputs[0], zr.inputs[0])
-    edge = n.new('ShaderNodeMath'); edge.operation = 'LESS_THAN'; edge.inputs[1].default_value = 0.12
-    l.new(zr.outputs[0], edge.inputs[0])
-    mx = n.new('ShaderNodeMix'); mx.data_type = 'RGBA'
-    l.new(edge.outputs[0], mx.inputs['Factor'])
-    l.new(hsv.outputs['Color'], mx.inputs['A']); mx.inputs['B'].default_value = (0.05, 0.05, 0.05, 1)
-    l.new(mx.outputs['Result'], b.inputs['Base Color'])
+    oi = n.new('ShaderNodeObjectInfo')
+
+    def mth(op, a, b_=None, c=None):
+        x = n.new('ShaderNodeMath'); x.operation = op
+        for i, v in enumerate((a, b_, c)):
+            if v is None:
+                continue
+            if isinstance(v, (int, float)):
+                x.inputs[i].default_value = v
+            else:
+                l.new(v, x.inputs[i])
+        return x.outputs[0]
+
+    def mix(f, a, b_):
+        x = n.new('ShaderNodeMix'); x.data_type = 'RGBA'
+        for sock, v in (('Factor', f), ('A', a), ('B', b_)):
+            if isinstance(v, tuple):
+                x.inputs[sock].default_value = (*v, 1)
+            elif isinstance(v, (int, float)):
+                x.inputs[sock].default_value = v
+            else:
+                l.new(v, x.inputs[sock])
+        return x.outputs['Result']
+    Z = mth('SUBTRACT', sep.outputs['Z'], C.KERB_H)
+    along = mth('ADD', sep.outputs['X'], sep.outputs['Y'])
+    zone = mth('MULTIPLY', mth('GREATER_THAN', Z, 0.15), mth('LESS_THAN', Z, 2.1))
+    wall_col = {'shelves': (0.55, 0.53, 0.5), 'bar': (0.12, 0.07, 0.04), 'laundry': (0.5, 0.55, 0.55),
+                'pizza': (0.6, 0.58, 0.52)}[kind]
+    if kind == 'shelves':
+        rowz = mth('DIVIDE', Z, 0.42); row = mth('FLOOR', rowz); rfr = mth('FRACT', rowz)
+        wr = n.new('ShaderNodeTexWhiteNoise'); wr.noise_dimensions = '1D'; l.new(row, wr.inputs['W'])
+        wsz = mth('MULTIPLY_ADD', wr.outputs['Value'], 0.09, 0.07)
+        cid = mth('FLOOR', mth('DIVIDE', along, wsz))
+        cv = n.new('ShaderNodeCombineXYZ'); l.new(cid, cv.inputs['X']); l.new(row, cv.inputs['Y'])
+        l.new(oi.outputs['Random'], cv.inputs['Z'])
+        wn = n.new('ShaderNodeTexWhiteNoise'); l.new(cv.outputs['Vector'], wn.inputs['Vector'])
+        ph = mth('MULTIPLY_ADD', wn.outputs['Value'], 0.4, 0.45)
+        prod = mth('MULTIPLY', mth('LESS_THAN', rfr, ph), mth('GREATER_THAN', rfr, 0.06))
+        hsv = n.new('ShaderNodeHueSaturation')
+        hsv.inputs['Saturation'].default_value = 0.35; hsv.inputs['Value'].default_value = 0.5
+        l.new(wn.outputs['Color'], hsv.inputs['Color'])
+        fix = mix(prod, (0.03, 0.03, 0.032), hsv.outputs['Color'])
+        fix = mix(mth('LESS_THAN', rfr, 0.06), fix, (0.35, 0.35, 0.36))
+    elif kind == 'bar':
+        band = mth('MULTIPLY', mth('GREATER_THAN', Z, 1.1), mth('LESS_THAN', Z, 1.7))
+        cid = mth('FLOOR', mth('DIVIDE', along, 0.09))
+        wn = n.new('ShaderNodeTexWhiteNoise'); wn.noise_dimensions = '1D'; l.new(cid, wn.inputs['W'])
+        bottle = mth('LESS_THAN', mth('FRACT', mth('DIVIDE', along, 0.09)), 0.7)
+        bh = mth('LESS_THAN', mth('SUBTRACT', Z, 1.1), mth('MULTIPLY_ADD', wn.outputs['Value'], 0.15, 0.22))
+        glass = mth('MULTIPLY', mth('MULTIPLY', band, bottle), bh)
+        hsv = n.new('ShaderNodeHueSaturation')
+        hsv.inputs['Hue'].default_value = 0.08; hsv.inputs['Saturation'].default_value = 0.8
+        l.new(wn.outputs['Color'], hsv.inputs['Color'])
+        fix = mix(glass, (0.1, 0.06, 0.035), hsv.outputs['Color'])
+        # back-lit bottle shelf glows (LED strip)
+        em = mth('MULTIPLY', glass, 0.6)
+        l.new(hsv.outputs['Color'], b.inputs['Emission Color'])
+        l.new(mth('MULTIPLY', em, 40 / 683), b.inputs['Emission Strength'])
+    elif kind == 'laundry':
+        cell = mth('DIVIDE', along, 0.7)
+        u = mth('SUBTRACT', mth('FRACT', cell), 0.5)
+        lowz = mth('SUBTRACT', Z, 0.75); upz = mth('SUBTRACT', Z, 1.6)
+        def door(zc):
+            cv = n.new('ShaderNodeCombineXYZ'); l.new(mth('MULTIPLY', u, 0.7), cv.inputs['X']); l.new(zc, cv.inputs['Y'])
+            ln = n.new('ShaderNodeVectorMath'); ln.operation = 'LENGTH'; l.new(cv.outputs['Vector'], ln.inputs[0])
+            return mth('LESS_THAN', ln.outputs['Value'], 0.2)
+        machine = mth('MULTIPLY', mth('GREATER_THAN', Z, 0.3), mth('LESS_THAN', Z, 2.0))
+        gap = mth('LESS_THAN', mth('ABSOLUTE', u), 0.47)
+        body = mth('MULTIPLY', machine, gap)
+        doors = mth('MAXIMUM', door(lowz), door(upz))
+        fix = mix(body, (0.12, 0.13, 0.13), (0.75, 0.76, 0.74))
+        fix = mix(mth('MULTIPLY', doors, body), fix, (0.04, 0.05, 0.06))
+    else:   # pizza
+        tile = n.new('ShaderNodeTexBrick')
+        tile.inputs['Scale'].default_value = 1.0
+        tile.inputs['Color1'].default_value = (0.72, 0.72, 0.68, 1); tile.inputs['Color2'].default_value = (0.68, 0.68, 0.64, 1)
+        tile.inputs['Mortar'].default_value = (0.35, 0.35, 0.33, 1)
+        tile.inputs['Mortar Size'].default_value = 0.004
+        tile.inputs['Brick Width'].default_value = 0.15; tile.inputs['Row Height'].default_value = 0.075
+        cv = n.new('ShaderNodeCombineXYZ'); l.new(along, cv.inputs['X']); l.new(Z, cv.inputs['Y'])
+        l.new(cv.outputs['Vector'], tile.inputs['Vector'])
+        counter = mth('MULTIPLY', mth('GREATER_THAN', Z, 0.15), mth('LESS_THAN', Z, 1.0))
+        fix = mix(counter, tile.outputs['Color'], (0.45, 0.45, 0.47))
+        b.inputs['Metallic'].default_value = 0.0
+        menu = mth('MULTIPLY', mth('GREATER_THAN', Z, 2.15), mth('LESS_THAN', Z, 2.9))
+        fix = mix(menu, fix, (0.08, 0.08, 0.08))
+        l.new(mth('MULTIPLY', menu, 120 / 683), b.inputs['Emission Strength'])
+        b.inputs['Emission Color'].default_value = (1.0, 0.85, 0.6, 1)
+        zone = mth('LESS_THAN', Z, 3.0)
+    col = mix(zone, wall_col, fix)
+    geo = n.new('ShaderNodeNewGeometry')
+    nz = n.new('ShaderNodeSeparateXYZ'); l.new(geo.outputs['Normal'], nz.inputs['Vector'])
+    hz = mth('GREATER_THAN', mth('ABSOLUTE', nz.outputs['Z']), 0.7)
+    col = mix(hz, col, (0.4, 0.38, 0.35))
+    l.new(col, b.inputs['Base Color'])
     return m
 
 
@@ -402,8 +485,8 @@ def window_glass_material():
     cr.elements[0].position = 0.0; cr.elements[0].color = (0, 0, 0, 1)
     # ~1/3 of windows lit at 11 pm on a weeknight; the rest dark. Lit ones vary in source and
     # brightness: warm tungsten / warm LED (most), cool LED / fluorescent, and TV-blue flicker.
-    for pos, k, g in ((0.665, 2700, 1.0), (0.745, 2400, 0.45), (0.80, 3000, 0.75), (0.855, 2700, 0.25),
-                      (0.885, 4300, 0.8), (0.925, 6000, 0.55), (0.955, 3500, 0.35), (0.975, 0, 0.3)):
+    for pos, k, g in ((0.665, 2700, 0.85), (0.745, 2400, 0.6), (0.80, 3000, 0.75), (0.855, 2700, 0.5),
+                      (0.885, 4300, 0.7), (0.925, 5500, 0.6), (0.955, 3500, 0.55), (0.975, 0, 0.45)):
         e = cr.elements.new(pos)
         rgb = M.blackbody_rgb(k) if k else (0.22, 0.38, 1.0)
         e.color = (rgb[0] * g, rgb[1] * g, rgb[2] * g, 1)
@@ -423,7 +506,7 @@ def window_glass_material():
     zfr = n.new('ShaderNodeMath'); zfr.operation = 'FRACT'; l.new(zf.outputs[0], zfr.inputs[0])
     grad = n.new('ShaderNodeMapRange')
     grad.inputs['From Min'].default_value = 0.25; grad.inputs['From Max'].default_value = 0.95
-    grad.inputs['To Min'].default_value = 0.55; grad.inputs['To Max'].default_value = 1.15
+    grad.inputs['To Min'].default_value = 0.65; grad.inputs['To Max'].default_value = 0.9
     l.new(zfr.outputs[0], grad.inputs['Value'])
     # blinds: fine slats in Z
     sl = n.new('ShaderNodeMath'); sl.operation = 'MULTIPLY'; sl.inputs[1].default_value = 25.0
@@ -431,7 +514,7 @@ def window_glass_material():
     sls = n.new('ShaderNodeMath'); sls.operation = 'SINE'; l.new(sl.outputs[0], sls.inputs[0])
     slm = n.new('ShaderNodeMapRange')
     slm.inputs['From Min'].default_value = -1; slm.inputs['From Max'].default_value = 1
-    slm.inputs['To Min'].default_value = 0.15; slm.inputs['To Max'].default_value = 0.6
+    slm.inputs['To Min'].default_value = 0.3; slm.inputs['To Max'].default_value = 0.65
     l.new(sls.outputs[0], slm.inputs['Value'])
     # curtains: soft folds along the facade (x + y), noise-modulated
     xy = n.new('ShaderNodeMath'); xy.operation = 'ADD'
@@ -442,7 +525,7 @@ def window_glass_material():
     nz.inputs['Detail'].default_value = 2.0
     l.new(cxyz.outputs['Vector'], nz.inputs['Vector'])
     cm = n.new('ShaderNodeMapRange')
-    cm.inputs['To Min'].default_value = 0.15; cm.inputs['To Max'].default_value = 0.5
+    cm.inputs['To Min'].default_value = 0.3; cm.inputs['To Max'].default_value = 0.6
     l.new(nz.outputs['Fac'], cm.inputs['Value'])
     s1 = n.new('ShaderNodeMath'); s1.operation = 'GREATER_THAN'; s1.inputs[1].default_value = 0.35
     s2 = n.new('ShaderNodeMath'); s2.operation = 'GREATER_THAN'; s2.inputs[1].default_value = 0.70
@@ -457,7 +540,7 @@ def window_glass_material():
     mul.inputs['Factor'].default_value = 1.0
     l.new(ramp.outputs['Color'], mul.inputs['A']); l.new(m2.outputs['Result'], mul.inputs['B'])
     l.new(mul.outputs['Result'], b.inputs['Emission Color'])
-    st = n.new('ShaderNodeValue'); st.name = 'WINDOW_NITS'; st.outputs[0].default_value = 28.0 / 683.0  # cd/m2
+    st = n.new('ShaderNodeValue'); st.name = 'WINDOW_NITS'; st.outputs[0].default_value = 24.0 / 683.0  # cd/m2
     l.new(st.outputs[0], b.inputs['Emission Strength'])
     return m
 
@@ -503,7 +586,7 @@ def build_lot(col, name, origin, udir, vdir, W, D, style_name, rng, mats, detail
         m.box(bx, bx + 3.0, -D * 0.6, -D * 0.6 + 3.5, roof_z, roof_z + 2.8, WALL)
     allm = [mats[wall_key], mats['trim'], mats['window_glass'], mats['frame'], mats['shop_glass'],
             mats['shopframe'], mats['fascia'], mats['awning'], mats['shutter'], mats['steel'], mats['roof'],
-            mats['cornice'], mats['interior']]
+            mats['cornice'], mats['interior'], mats['int_bar'], mats['int_laundry'], mats['int_pizza']]
     ob = m.finish(name, col, allm)
     for i, (text, loc, h, mw, rgb, lit, frame) in enumerate(signs):
         make_sign(text, loc, h, mw, rgb, lit, frame, sign_col, f'{name}_sign{i}')
