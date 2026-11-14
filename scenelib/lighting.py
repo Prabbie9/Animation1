@@ -631,9 +631,9 @@ def camera_look(sc, dispersion=0.004, vignette=0.12, grain=0.05):
     ld.inputs['Dispersion'].default_value = dispersion
     t.links.new(src, ld.inputs['Image'])
     el = t.nodes.new('CompositorNodeEllipseMask')
-    el.width, el.height = 1.15, 1.15
+    el.mask_width, el.mask_height = 1.15, 1.15     # (node.width is the editor UI width!)
     bl = t.nodes.new('CompositorNodeBlur'); bl.use_relative = True
-    bl.factor_x = bl.factor_y = 0.35; bl.filter_type = 'GAUSS'
+    bl.factor_x = bl.factor_y = 35.0; bl.filter_type = 'GAUSS'      # percent of the frame
     t.links.new(el.outputs['Mask'], bl.inputs['Image'])
     vg = t.nodes.new('CompositorNodeMapRange')
     vg.inputs['From Min'].default_value = 0.0; vg.inputs['From Max'].default_value = 1.0
@@ -664,3 +664,60 @@ def motion_blur(sc, vehicles):
     for v in vehicles.values():
         for w in v['wheels'].values():
             w.cycles.motion_steps = 3
+
+
+LENS_DROPS = [
+    # (land frame, x, y (0..1, y up), radius (fraction of width), slide in y over the rest of the shot)
+    (150, 0.22, 0.78, 0.035, -0.012),
+    (170, 0.86, 0.62, 0.022, -0.006),
+]
+
+
+def lens_drops(sc, drops=LENS_DROPS, strength=0.85):
+    """Rain drops landing on the front lens element. At f/2 focused ~11 m a drop on the lens is
+    completely defocused: what you see is a soft disc in which the scene behind it is heavily
+    blurred (and very slightly brighter where light sources sit), with a faint darker rim. Built
+    as a strongly blurred copy of the frame blended in through a soft, animated ellipse mask per
+    drop (mask_width/mask_height keyed: invisible until the landing frame). Resolution independent."""
+    t = sc.node_tree
+    ca = t.nodes['LENS_CA']
+    src = ca.inputs['Image'].links[0].from_socket
+    blr = t.nodes.new('CompositorNodeBlur'); blr.name = 'DROP_BLUR'; blr.use_relative = True
+    blr.factor_x = blr.factor_y = 3.0; blr.filter_type = 'GAUSS'     # percent of the frame
+    t.links.new(src, blr.inputs['Image'])
+    lift = t.nodes.new('CompositorNodeMixRGB'); lift.blend_type = 'MULTIPLY'
+    lift.inputs['Fac'].default_value = 1.0; lift.inputs[2].default_value = (1.06, 1.06, 1.08, 1)
+    t.links.new(blr.outputs['Image'], lift.inputs[1])
+    aspect = sc.render.resolution_x / sc.render.resolution_y
+    mask_sum = None
+    for i, (f0, x, y, r, slide) in enumerate(drops):
+        el = t.nodes.new('CompositorNodeEllipseMask'); el.name = f'DROP_{i}'
+        el.x, el.y = x, y
+        el.mask_width = el.mask_height = 0.0
+        el.keyframe_insert('mask_width', frame=f0 - 1); el.keyframe_insert('mask_height', frame=f0 - 1)
+        el.mask_width, el.mask_height = 2 * r, 2 * r * aspect * 1.08      # slightly tall: gravity
+        el.keyframe_insert('mask_width', frame=f0); el.keyframe_insert('mask_height', frame=f0)
+        el.keyframe_insert('y', frame=f0)
+        el.y = y + slide
+        el.keyframe_insert('y', frame=C.FRAME_END)
+        sb = t.nodes.new('CompositorNodeBlur'); sb.use_relative = True
+        sb.factor_x = sb.factor_y = r * 60.0; sb.filter_type = 'GAUSS'  # percent: soft edge
+        t.links.new(el.outputs['Mask'], sb.inputs['Image'])
+        if mask_sum is None:
+            mask_sum = sb.outputs['Image']
+        else:
+            mx = t.nodes.new('CompositorNodeMath'); mx.operation = 'MAXIMUM'
+            t.links.new(mask_sum, mx.inputs[0]); t.links.new(sb.outputs['Image'], mx.inputs[1])
+            mask_sum = mx.outputs[0]
+    ad = t.animation_data
+    if ad and ad.action:
+        for fc in ad.action.fcurves:
+            if 'DROP_' in fc.data_path:
+                for kp in fc.keyframe_points:
+                    kp.interpolation = 'CONSTANT' if 'mask_' in fc.data_path else 'LINEAR'
+    k = t.nodes.new('CompositorNodeMath'); k.operation = 'MULTIPLY'; k.inputs[1].default_value = strength
+    t.links.new(mask_sum, k.inputs[0])
+    mix = t.nodes.new('CompositorNodeMixRGB'); mix.name = 'LENS_DROPS'
+    t.links.new(k.outputs[0], mix.inputs['Fac'])
+    t.links.new(src, mix.inputs[1]); t.links.new(lift.outputs['Image'], mix.inputs[2])
+    t.links.new(mix.outputs['Image'], ca.inputs['Image'])

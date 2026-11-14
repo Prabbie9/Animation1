@@ -507,6 +507,7 @@ def build(root, cam, vehicles, road_mat, awning_edges):
     rain_streaks(col, cam, proto, (-7.0, -28.0, 0.0), (13.0, -6.0, 9.0), 15500, 11, 'RainNear')
     rain_streaks(col, cam, proto, (-12.0, -6.0, 0.0), (14.0, 40.0, 16.0), 8000, 23, 'RainFar')
     awning_drips(col, cam, streak_proto(col, sm, name='DripProto'), awning_edges, random.Random(C.SEED + 9))
+    splash_crowns(col, vehicles, random.Random(C.SEED + 13))
     water_surface_animation(road_mat)
     if bpy.data.materials.get('Asphalt_patch'):
         patch_ripples(bpy.data.materials['Asphalt_patch'])
@@ -514,3 +515,143 @@ def build(root, cam, vehicles, road_mat, awning_edges):
     wet_vehicles()
     wipers(root, vehicles)
     return col
+
+
+# ------------------------------------------------------------------------- splash crowns
+def crown_proto(col, mat):
+    """Milk-drop crown: an open ring with 8 spikes, unit radius 1 cm, height 1 cm (24 tris)."""
+    bm = bmesh.new()
+    n = 8
+    base, top = [], []
+    for i in range(n * 2):
+        a = 2 * math.pi * i / (n * 2)
+        r0, r1 = 0.006, 0.01
+        base.append(bm.verts.new((r0 * math.cos(a), r0 * math.sin(a), 0.0)))
+        h = 0.01 if i % 2 == 0 else 0.004                       # spikes on every other vertex
+        top.append(bm.verts.new((r1 * math.cos(a), r1 * math.sin(a), h)))
+    for i in range(n * 2):
+        j = (i + 1) % (n * 2)
+        bm.faces.new((base[i], base[j], top[j], top[i]))
+    me = bpy.data.meshes.new('SplashCrown'); bm.to_mesh(me); bm.free()
+    me.materials.append(mat)
+    ob = bpy.data.objects.new('SplashCrownProto', me)
+    col.objects.link(ob)
+    ob.hide_render = True; ob.hide_viewport = True
+    return ob
+
+
+def splash_material():
+    """Thin water sheet: glossy + translucent, partly transparent, fading with distance."""
+    m, n, l = M.new('SplashWater')
+    out = n['Material Output']
+    n.remove(n['Principled BSDF'])
+    gl = n.new('ShaderNodeBsdfGlossy'); gl.inputs['Roughness'].default_value = 0.06
+    tr = n.new('ShaderNodeBsdfTranslucent'); tr.inputs['Color'].default_value = (0.9, 0.92, 0.94, 1)
+    ad = n.new('ShaderNodeAddShader'); l.new(gl.outputs[0], ad.inputs[0]); l.new(tr.outputs[0], ad.inputs[1])
+    tp = n.new('ShaderNodeBsdfTransparent')
+    cd_ = n.new('ShaderNodeCameraData')
+    fall = n.new('ShaderNodeMapRange'); fall.interpolation_type = 'SMOOTHSTEP'
+    fall.inputs['From Min'].default_value = 5.0; fall.inputs['From Max'].default_value = 30.0
+    fall.inputs['To Min'].default_value = 1.0; fall.inputs['To Max'].default_value = 0.25
+    l.new(cd_.outputs['View Distance'], fall.inputs['Value'])
+    mx = n.new('ShaderNodeMixShader')
+    l.new(fall.outputs['Result'], mx.inputs['Fac']); l.new(tp.outputs[0], mx.inputs[1]); l.new(ad.outputs[0], mx.inputs[2])
+    l.new(mx.outputs[0], out.inputs['Surface'])
+    return m
+
+
+def splash_crowns(col, vehicles, rng, count=3000, life=0.1):
+    """Impact splashes on the shared clock. Each site fires once per 0.5-1.4 s; a crown lives
+    `life` seconds: it rises and widens (radius 0.6 -> 2.5 cm), then collapses. ~count*life/0.95
+    splashes alive per frame (~300). Sites are on the road (z=0) or the sidewalk (z=kerb) and
+    never under the stationary cars (rain can't land there)."""
+    def on_sidewalk(x, y):
+        hw, hs, r = C.AVE_HALF, C.CROSS_HALF, C.KERB_RADIUS
+        x, y = abs(x), abs(y)
+        if x <= hw or y <= hs:
+            return False
+        if x < hw + r and y < hs + r:
+            return math.hypot(x - (hw + r), y - (hs + r)) <= r
+        return True
+    # footprints of the cars that are parked/stopped in view (camry: its final position)
+    feet = []
+    for name in ('taxi', 'camry', 'sb0', 'sb1', 'sb2'):
+        v = vehicles.get(name)
+        if v is None:
+            continue
+        sx, sy, _ = v['root']['size']
+        ev = v['root'].location
+        if name == 'camry':
+            ev = v['root'].matrix_world.translation        # evaluated later frames match the stop
+        feet.append((ev.x, ev.y, sx / 2 + 0.1, sy / 2 + 0.1))
+    verts, period, phase = [], [], []
+    tries = 0
+    while len(verts) < count and tries < count * 20:
+        tries += 1
+        # visible ground: the avenue + its sidewalks from behind the camera to past the far stop line,
+        # and the cross street close to the intersection
+        if rng.random() < 0.8:
+            x, y = rng.uniform(-10.5, 10.5), rng.uniform(-27.0, 16.0)
+        else:
+            x, y = rng.uniform(-28.0, 28.0), rng.uniform(-9.6, 9.6)
+        if abs(x) > C.AVE_HALF + C.SIDEWALK and abs(y) > C.CROSS_HALF + C.SIDEWALK:
+            continue                                        # inside a building block
+        if any(abs(x - fx) < hx and abs(y - fy) < hy for fx, fy, hx, hy in feet):
+            continue
+        z = C.KERB_H + 0.001 if on_sidewalk(x, y) else 0.004
+        verts.append((x, y, z)); period.append(rng.uniform(0.5, 1.4)); phase.append(rng.random())
+    me = bpy.data.meshes.new('SplashSites')
+    me.from_pydata(verts, [], [])
+    for nm, data in (('period', period), ('phase', phase)):
+        a = me.attributes.new(nm, 'FLOAT', 'POINT'); a.data.foreach_set('value', data)
+    g = _gn_group('SplashCrowns')
+    n, l = g.nodes, g.links
+    gi = n.new('NodeGroupInput'); go = n.new('NodeGroupOutput')
+    st = n.new('GeometryNodeInputSceneTime')
+
+    def fm(op, a, b=None, c=None):
+        x = n.new('ShaderNodeMath'); x.operation = op
+        for i, v in enumerate((a, b, c)):
+            if v is None:
+                continue
+            if isinstance(v, (int, float)):
+                x.inputs[i].default_value = v
+            else:
+                l.new(v, x.inputs[i])
+        return x.outputs[0]
+    na_p = n.new('GeometryNodeInputNamedAttribute'); na_p.data_type = 'FLOAT'; na_p.inputs['Name'].default_value = 'period'
+    na_f = n.new('GeometryNodeInputNamedAttribute'); na_f.data_type = 'FLOAT'; na_f.inputs['Name'].default_value = 'phase'
+    tau = fm('MULTIPLY', fm('FRACT', fm('ADD', fm('DIVIDE', st.outputs['Seconds'], na_p.outputs['Attribute']),
+                                        na_f.outputs['Attribute'])), na_p.outputs['Attribute'])
+    dead = fm('GREATER_THAN', tau, life)
+    dl = n.new('GeometryNodeDeleteGeometry'); dl.domain = 'POINT'
+    l.new(gi.outputs['Geometry'], dl.inputs['Geometry']); l.new(dead, dl.inputs['Selection'])
+    pts = n.new('GeometryNodeMeshToPoints'); l.new(dl.outputs['Geometry'], pts.inputs['Mesh'])
+    s = fm('DIVIDE', tau, life)                                       # 0..1 over the crown's life
+    rad = fm('MULTIPLY_ADD', s, 1.9, 0.6)                             # x1 cm: 0.6 -> 2.5 cm
+    hgt = fm('MULTIPLY', fm('SINE', fm('MULTIPLY', s, math.pi)), 1.8) # rises then collapses
+    rr = n.new('FunctionNodeRandomValue'); rr.data_type = 'FLOAT'
+    rr.inputs[2].default_value = 0.7; rr.inputs[3].default_value = 1.3
+    rad2 = fm('MULTIPLY', rad, rr.outputs[1])
+    scl = n.new('ShaderNodeCombineXYZ')
+    l.new(rad2, scl.inputs['X']); l.new(rad2, scl.inputs['Y']); l.new(hgt, scl.inputs['Z'])
+    rz = n.new('FunctionNodeRandomValue'); rz.data_type = 'FLOAT_VECTOR'
+    rz.inputs['Min'].default_value = (0, 0, 0); rz.inputs['Max'].default_value = (0, 0, 6.283)
+    proto = crown_proto(col, splash_material())
+    pi = n.new('GeometryNodeObjectInfo'); pi.inputs['Object'].default_value = proto
+    pi.inputs['As Instance'].default_value = True
+    iop = n.new('GeometryNodeInstanceOnPoints')
+    l.new(pts.outputs['Points'], iop.inputs['Points']); l.new(pi.outputs['Geometry'], iop.inputs['Instance'])
+    l.new(scl.outputs['Vector'], iop.inputs['Scale'])
+    eul = n.new('FunctionNodeEulerToRotation') if 'FunctionNodeEulerToRotation' in dir(bpy.types) else None
+    if eul is not None:
+        l.new(rz.outputs['Value'], eul.inputs['Euler']); l.new(eul.outputs['Rotation'], iop.inputs['Rotation'])
+    else:
+        l.new(rz.outputs['Value'], iop.inputs['Rotation'])
+    l.new(iop.outputs['Instances'], go.inputs['Geometry'])
+    ob = bpy.data.objects.new('SplashCrowns', me)
+    col.objects.link(ob)
+    mod = ob.modifiers.new('Splashes', 'NODES'); mod.node_group = g
+    ob.visible_shadow = False; ob.visible_glossy = False; ob.visible_diffuse = False
+    ob.cycles.use_motion_blur = False
+    return ob

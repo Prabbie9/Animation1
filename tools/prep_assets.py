@@ -114,7 +114,12 @@ def main():
     for key in keys:
         sp = SPECS[key]
         bpy.ops.wm.read_factory_settings(use_empty=True)
-        bpy.ops.import_scene.gltf(filepath=os.path.join(ROOT, 'assets', 'sketchfab', sp['src'], 'model.glb'))
+        # Prefer the full-resolution glTF archive when present (Sketchfab's GLB download ships
+        # textures downscaled to 1024 px; the 'gltf' archive keeps the originals).
+        gl = os.path.join(ROOT, 'assets', 'sketchfab', sp['src'], 'gltf', 'scene.gltf')
+        src_file = gl if os.path.exists(gl) else os.path.join(ROOT, 'assets', 'sketchfab', sp['src'], 'model.glb')
+        print(f'[prep] {key}: importing {os.path.relpath(src_file, ROOT)}')
+        bpy.ops.import_scene.gltf(filepath=src_file)
         bpy.context.view_layer.update()
         meshes = [o for o in bpy.data.objects if o.type == 'MESH']
         if 'node' in sp:

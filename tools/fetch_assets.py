@@ -29,6 +29,11 @@ def fetch_sketchfab(a):
     data = get(info['glb']['url'])
     with open(dst, 'wb') as f:
         f.write(data)
+    if a.get('gltf_full_res'):
+        # full-resolution textures: Sketchfab's 'gltf' archive keeps the original texture sizes
+        gdir = os.path.join(os.path.dirname(dst), 'gltf')
+        os.makedirs(gdir, exist_ok=True)
+        zipfile.ZipFile(io.BytesIO(get(info['gltf']['url']))).extractall(gdir)
     return f'{len(data) // 1_000_000} MB'
 
 

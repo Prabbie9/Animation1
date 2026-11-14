@@ -9,7 +9,8 @@
    "author": "8sianDude",
    "license": "CC-BY-4.0",
    "url": "https://sketchfab.com/3d-models/2001-crown-victoria-taxi-game-prop-2429a825ff1646568e8e6e1453f9c501",
-   "use": "hero taxi"
+   "use": "hero taxi",
+   "gltf_full_res": true
   },
   {
    "key": "car_pack",
@@ -42,7 +43,8 @@
    "author": "ItsDiyor",
    "license": "CC-BY-4.0",
    "url": "https://sketchfab.com/3d-models/toyota-camry-2020-236a5a6e2fa6420fbdf641f4800cd544",
-   "use": "northbound car that stops beside the taxi"
+   "use": "northbound car that stops beside the taxi",
+   "gltf_full_res": true
   },
   {
    "key": "hydrant",
@@ -53,7 +55,8 @@
    "author": "Fayruso",
    "license": "CC-BY-4.0",
    "url": "https://sketchfab.com/3d-models/american-fire-hydrant-d021f42ea8c44afe9c90655beaa36d89",
-   "use": "fire hydrants"
+   "use": "fire hydrants",
+   "gltf_full_res": true
   },
   {
    "key": "newsbox",
@@ -64,7 +67,8 @@
    "author": "Keith Ito",
    "license": "CC-BY-4.0",
    "url": "https://sketchfab.com/3d-models/newspaper-boxes-8975781045254725850af6ef43dfeca5",
-   "use": "newspaper boxes"
+   "use": "newspaper boxes",
+   "gltf_full_res": true
   },
   {
    "key": "cityprops2",

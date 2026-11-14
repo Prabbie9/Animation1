@@ -97,6 +97,10 @@ Resolution is the other big lever:
 | 75 | 2880×1620 | 0.56× | a slight softening after upscaling to 4K; rain streaks and brick texture lose some crispness. Generally less visible than dropping from `final` to `fast`. |
 | 50 | 1920×1080 | 0.25× | a 1080p deliverable |
 
+Optional extras and their measured cost (CPU, frame 96): the splash crowns that are in the scene
+cost ~1–2 %. Volumetric light shafts (*not* in the scene) would cost +34 % at equal samples,
+likely +50–100 % at equal noise (`tools/volume_cost.py`, `docs/stages/08_improvements/`).
+
 Suggested order if the benchmark is over budget (2 min/frame): first `--quality balanced`,
 then `--scale 75`, then both, then `--quality fast`. `--samples N` overrides the cap of any
 preset.
@@ -108,9 +112,9 @@ reflections. This cut the noise in the wet-road reflections 14× (see
 the intended ripple/runoff animation (`docs/stages/06_traffic/REVIEW.md`).
 
 ### VRAM
-Estimated peak at 4K: **~4.9 GB** (run `blender -b scene.blend -P tools/vram_estimate.py`).
-That covers textures 0.9 GB (102 images, no mipmaps on GPU; the three 4K asphalt maps are the
-largest at 64 MB each), geometry 0.24 GB (1.24 M unique triangles, 30 k instances including
+Estimated peak at 4K: **~5.2 GB** (run `blender -b scene.blend -P tools/vram_estimate.py`).
+That covers textures 1.27 GB (102 images, no mipmaps on GPU; the three 4K asphalt maps are
+the largest at 64 MB each; the hero assets use full-resolution 2K maps), geometry 0.24 GB (1.24 M unique triangles, 30 k instances including
 the rain), 4K render buffers 0.76 GB, GPU OIDN ~2 GB, and runtime overhead ~1 GB. Repeated
 assets are instanced and textures are capped at 2K (asphalt excepted). If you ever hit
 out-of-memory errors: first `--scale 75`, then set the OIDN denoiser to the CPU, then reduce
@@ -140,7 +144,7 @@ blender -b scene.blend -P render.py -- [options]
 | `scenelib/surfaces.py`, `materials.py` | asphalt with puddles and gutter water, shared wetness model |
 | `scenelib/signals.py` | signal heads and the signal cycle |
 | `scenelib/traffic.py` | vehicle motion (analytic, one clock), wheel spin, brake lamps, suspension pitch |
-| `scenelib/rain.py` | rain streaks (Geometry Nodes), ripples, runoff, drips, wet vehicles, wipers |
+| `scenelib/rain.py` | rain streaks and splash crowns (Geometry Nodes), ripples, runoff, drips, wet vehicles, wipers |
 | `render.py`, `encode.sh` | production render and encode |
 | `assets/lib/` | prepared assets (metric, oriented, textures ≤2K) used by the builder |
 | `assets/polyhaven/` | Poly Haven textures and HDRI (CC0) |
@@ -149,8 +153,10 @@ blender -b scene.blend -P render.py -- [options]
 | `docs/stages/` | review renders from each stage of the verification loop |
 
 ### Re-creating the assets from source (optional)
-The prepared assets are committed, so this step is not needed. To rebuild them, download the
-raw files (Poly Haven needs no key; for Sketchfab, set `SKETCHFAB_TOKEN` to your API token) and
+The prepared assets are committed, so this step is not needed. For the taxi, Camry, hydrant and
+newspaper boxes, the prep uses Sketchfab's **glTF archive** (`assets/sketchfab/<key>/gltf/`),
+which keeps full-resolution textures; the GLB download is downscaled to 1024 px. To rebuild
+them, download the raw files (Poly Haven needs no key; for Sketchfab, set `SKETCHFAB_TOKEN` to your API token) and
 then re-run the prep script:
 ```
 python3 tools/fetch_assets.py

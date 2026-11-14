@@ -71,6 +71,7 @@ def night(sc, root, vehicles):
     lighting.haze_compositor(sc)
     lighting.glare(sc, threshold=6.0, mix=-0.92, size=5)
     lighting.camera_look(sc)
+    # lighting.lens_drops(sc)   # tested and rejected: invisible on this dark background unless faked (docs/stages/08_improvements)
     cy = sc.cycles
     cy.sample_clamp_indirect = 3.0
     cy.blur_glossy = 1.0
